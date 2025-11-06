@@ -8,6 +8,8 @@
 import { logger } from './logger';
 import type { WindowEvent, FileEvent, CorrelatedEvent } from './types';
 import type { DatabaseWriter } from './database/writer';
+import type { Config } from './config-loader';
+import { shouldMonitorFile, shouldMonitorProcess } from './config-loader';
 
 export class EventCorrelator {
   private logFile: string;
@@ -15,16 +17,24 @@ export class EventCorrelator {
   private currentWindow: WindowEvent | null = null;
   private dbWriter: DatabaseWriter | null;
   private keepJsonl: boolean;
+  private config: Config;
   private stats = {
     windowEvents: 0,
     fileEvents: 0,
     correlatedEvents: 0,
+    filteredEvents: 0,
   };
 
-  constructor(logFile: string, dbWriter: DatabaseWriter | null = null, keepJsonl: boolean = true) {
+  constructor(
+    logFile: string, 
+    dbWriter: DatabaseWriter | null = null, 
+    keepJsonl: boolean = true,
+    config: Config
+  ) {
     this.logFile = logFile;
     this.dbWriter = dbWriter;
     this.keepJsonl = keepJsonl;
+    this.config = config;
   }
 
   async init(): Promise<void> {
@@ -68,6 +78,7 @@ export class EventCorrelator {
     logger.info(`   Window events: ${this.stats.windowEvents}`);
     logger.info(`   File events: ${this.stats.fileEvents}`);
     logger.info(`   Correlated events: ${this.stats.correlatedEvents}`);
+    logger.info(`   Filtered events: ${this.stats.filteredEvents}`);
   }
 
   handleWindowEvent(event: WindowEvent): void {
@@ -82,6 +93,20 @@ export class EventCorrelator {
   }
 
   handleFileEvent(event: FileEvent): void {
+    // Apply file filters
+    if (!shouldMonitorFile(event.filePath, this.config)) {
+      this.stats.filteredEvents++;
+      logger.debug(`🚫 Filtered file: ${event.filePath}`);
+      return;
+    }
+
+    // Apply process filters
+    if (!shouldMonitorProcess(event.processName, this.config)) {
+      this.stats.filteredEvents++;
+      logger.debug(`🚫 Filtered process: ${event.processName}`);
+      return;
+    }
+
     this.stats.fileEvents++;
 
     // Check if we can correlate with current window

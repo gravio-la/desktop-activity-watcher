@@ -15,6 +15,7 @@ import { loadDatabaseConfig } from './database/config';
 import { InfluxDBAdapter } from './database/influxdb-adapter';
 import { TimescaleDBAdapter } from './database/timescaledb-adapter';
 import { RedisAdapter } from './database/redis-adapter';
+import { loadConfig, expandEnvVars } from './config-loader';
 
 const HOME_DIR = process.env.HOME || '/home/user';
 const LOG_FILE = process.env.LOG_FILE || '/tmp/desktop-agent-events.jsonl';
@@ -41,34 +42,73 @@ async function main() {
   }
 
   try {
-    // Load database configuration
-    const config = loadDatabaseConfig();
+    // Load configuration
+    const appConfig = await loadConfig();
+    
+    // Log filter configuration
+    if (appConfig.monitoring.fileFilters?.enabled) {
+      logger.info('📋 File filters enabled:');
+      logger.info(`   Mode: ${appConfig.monitoring.fileFilters.mode}`);
+      logger.info(`   Patterns: ${appConfig.monitoring.fileFilters.patterns?.length || 0}`);
+      if (appConfig.monitoring.fileFilters.patterns && appConfig.monitoring.fileFilters.patterns.length > 0) {
+        appConfig.monitoring.fileFilters.patterns.forEach(p => {
+          logger.info(`     - ${p}`);
+        });
+      }
+    }
+    
+    // Load database configuration (with override from appConfig if present)
+    const dbConfig = appConfig.databases ? {
+      influxdb: {
+        enabled: appConfig.databases.influxdb?.enabled ?? true,
+        url: appConfig.databases.influxdb?.url ?? 'http://localhost:8086',
+        token: appConfig.databases.influxdb?.token ?? 'desktop-agent-token-123',
+        org: appConfig.databases.influxdb?.org ?? 'desktop-agent',
+        bucket: appConfig.databases.influxdb?.bucket ?? 'file-access',
+      },
+      timescaledb: {
+        enabled: appConfig.databases.timescaledb?.enabled ?? true,
+        connectionString: appConfig.databases.timescaledb?.connectionString ?? 
+          'postgresql://desktopagent:desktopagent123@localhost:5432/desktop_agent',
+      },
+      redis: {
+        enabled: appConfig.databases.redis?.enabled ?? true,
+        url: appConfig.databases.redis?.url ?? 'redis://localhost:6379',
+      },
+      keepJsonl: appConfig.databases.jsonl?.enabled ?? true,
+    } : loadDatabaseConfig();
     
     // Initialize database adapters
     const adapters = [];
     
-    if (config.influxdb.enabled) {
+    if (dbConfig.influxdb.enabled) {
       logger.info('🔌 Enabling InfluxDB adapter');
-      adapters.push(new InfluxDBAdapter(config.influxdb));
+      adapters.push(new InfluxDBAdapter(dbConfig.influxdb));
     }
     
-    if (config.timescaledb.enabled) {
+    if (dbConfig.timescaledb.enabled) {
       logger.info('🔌 Enabling TimescaleDB adapter');
-      adapters.push(new TimescaleDBAdapter(config.timescaledb));
+      adapters.push(new TimescaleDBAdapter(dbConfig.timescaledb));
     }
     
-    if (config.redis.enabled) {
+    if (dbConfig.redis.enabled) {
       logger.info('🔌 Enabling Redis adapter');
-      adapters.push(new RedisAdapter(config.redis));
+      adapters.push(new RedisAdapter(dbConfig.redis));
     }
 
     // Create database writer
     const dbWriter = adapters.length > 0 ? new DatabaseWriter(adapters) : null;
 
+    // Get log file path from config
+    const logFile = appConfig.databases?.jsonl?.path ?? LOG_FILE;
+
     // Initialize components
-    const correlator = new EventCorrelator(LOG_FILE, dbWriter, config.keepJsonl);
+    const correlator = new EventCorrelator(logFile, dbWriter, dbConfig.keepJsonl, appConfig);
     const windowTracker = new WindowTracker();
-    const fileMonitor = new FileMonitor(HOME_DIR);
+    
+    // Use home directory from config
+    const homeDir = expandEnvVars(appConfig.monitoring.homeDirectory);
+    const fileMonitor = new FileMonitor(homeDir);
 
     // Initialize correlator (connects to databases)
     await correlator.init();

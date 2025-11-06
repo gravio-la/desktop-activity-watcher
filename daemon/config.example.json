@@ -1,0 +1,47 @@
+{
+  "$schema": "./config.schema.json",
+  "monitoring": {
+    "enabled": true,
+    "homeDirectory": "$HOME",
+    "fileFilters": {
+      "enabled": true,
+      "mode": "include",
+      "patterns": [
+        "~/daten/**"
+      ],
+      "excludePatterns": [
+        "**/.git/**",
+        "**/node_modules/**",
+        "**/.cache/**"
+      ]
+    },
+    "processFilters": {
+      "enabled": false,
+      "excludeProcesses": []
+    }
+  },
+  "correlation": {
+    "enabled": true,
+    "correlateByPid": true
+  },
+  "databases": {
+    "influxdb": {
+      "enabled": true
+    },
+    "timescaledb": {
+      "enabled": true
+    },
+    "redis": {
+      "enabled": true
+    },
+    "jsonl": {
+      "enabled": true,
+      "path": "/tmp/desktop-agent-events.jsonl"
+    }
+  },
+  "logging": {
+    "level": "info",
+    "pretty": true
+  }
+}
+

@@ -1,0 +1,60 @@
+{
+  "monitoring": {
+    "enabled": true,
+    "homeDirectory": "$HOME",
+    "fileFilters": {
+      "enabled": true,
+      "mode": "include",
+      "patterns": [
+        "~/daten/**",
+        "~/Documents/**"
+      ],
+      "excludePatterns": [
+        "**/.git/**",
+        "**/node_modules/**",
+        "**/.cache/**",
+        "**/tmp/**"
+      ],
+      "minFileSize": 0,
+      "extensions": []
+    },
+    "processFilters": {
+      "enabled": false,
+      "includeProcesses": [],
+      "excludeProcesses": [
+        "kwin_wayland",
+        "plasmashell"
+      ]
+    }
+  },
+  "correlation": {
+    "enabled": true,
+    "correlateByPid": true
+  },
+  "databases": {
+    "influxdb": {
+      "enabled": true,
+      "url": "http://localhost:8086",
+      "token": "desktop-agent-token-123",
+      "org": "desktop-agent",
+      "bucket": "file-access"
+    },
+    "timescaledb": {
+      "enabled": true,
+      "connectionString": "postgresql://desktopagent:desktopagent123@localhost:5432/desktop_agent"
+    },
+    "redis": {
+      "enabled": false,
+      "url": "redis://localhost:6379"
+    },
+    "jsonl": {
+      "enabled": true,
+      "path": "/tmp/desktop-agent-events.jsonl"
+    }
+  },
+  "logging": {
+    "level": "info",
+    "pretty": true
+  }
+}
+
