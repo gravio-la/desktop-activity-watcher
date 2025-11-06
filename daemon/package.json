@@ -7,15 +7,23 @@
     "start": "./run.sh",
     "start:direct": "bun run src/index.ts",
     "dev": "bun --watch run src/index.ts",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "cli": "bun run src/cli.ts"
   },
   "dependencies": {
     "pino": "^8.16.2",
-    "pino-pretty": "^10.2.3"
+    "pino-pretty": "^10.2.3",
+    "zod": "^4.1.12",
+    "@influxdata/influxdb-client": "^1.33.2",
+    "pg": "^8.11.3",
+    "redis": "^5.9.0",
+    "cmd-ts": "^0.13.0",
+    "date-fns": "^4.1.0"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "@types/node": "^20.10.0"
+    "@types/node": "^20.10.0",
+    "@types/pg": "^8.10.9"
   }
 }
 

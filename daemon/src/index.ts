@@ -3,13 +3,18 @@
  * Desktop Agent Daemon
  * 
  * Integrates window focus tracking from KWin with file access monitoring via opensnoop
- * Provides unified logging and will eventually write to time series databases
+ * Writes events to InfluxDB, TimescaleDB, and Redis time series databases
  */
 
 import { logger } from './logger';
 import { WindowTracker } from './window-tracker';
 import { FileMonitor } from './file-monitor';
 import { EventCorrelator } from './correlator';
+import { DatabaseWriter } from './database/writer';
+import { loadDatabaseConfig } from './database/config';
+import { InfluxDBAdapter } from './database/influxdb-adapter';
+import { TimescaleDBAdapter } from './database/timescaledb-adapter';
+import { RedisAdapter } from './database/redis-adapter';
 
 const HOME_DIR = process.env.HOME || '/home/user';
 const LOG_FILE = process.env.LOG_FILE || '/tmp/desktop-agent-events.jsonl';
@@ -36,10 +41,37 @@ async function main() {
   }
 
   try {
+    // Load database configuration
+    const config = loadDatabaseConfig();
+    
+    // Initialize database adapters
+    const adapters = [];
+    
+    if (config.influxdb.enabled) {
+      logger.info('🔌 Enabling InfluxDB adapter');
+      adapters.push(new InfluxDBAdapter(config.influxdb));
+    }
+    
+    if (config.timescaledb.enabled) {
+      logger.info('🔌 Enabling TimescaleDB adapter');
+      adapters.push(new TimescaleDBAdapter(config.timescaledb));
+    }
+    
+    if (config.redis.enabled) {
+      logger.info('🔌 Enabling Redis adapter');
+      adapters.push(new RedisAdapter(config.redis));
+    }
+
+    // Create database writer
+    const dbWriter = adapters.length > 0 ? new DatabaseWriter(adapters) : null;
+
     // Initialize components
-    const correlator = new EventCorrelator(LOG_FILE);
+    const correlator = new EventCorrelator(LOG_FILE, dbWriter, config.keepJsonl);
     const windowTracker = new WindowTracker();
     const fileMonitor = new FileMonitor(HOME_DIR);
+
+    // Initialize correlator (connects to databases)
+    await correlator.init();
 
     // Forward events to correlator
     windowTracker.on('window-activated', (event) => {
@@ -85,14 +117,26 @@ async function main() {
     await new Promise(() => {});
 
   } catch (error) {
-    logger.error('❌ Fatal error:', error);
+    logger.error('❌ Fatal error:');
+    if (error instanceof Error) {
+      logger.error(`   Message: ${error.message}`);
+      logger.error(`   Stack: ${error.stack}`);
+    } else {
+      logger.error(`   ${String(error)}`);
+    }
     process.exit(1);
   }
 }
 
 // Start the daemon
 main().catch((error) => {
-  logger.error('Fatal error in main:', error);
+  logger.error('Fatal error in main:');
+  if (error instanceof Error) {
+    logger.error(`   Message: ${error.message}`);
+    logger.error(`   Stack: ${error.stack}`);
+  } else {
+    logger.error(`   ${String(error)}`);
+  }
   process.exit(1);
 });
 
