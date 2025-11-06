@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  # InfluxDB - Time Series Database
+  influxdb:
+    image: influxdb:2.7-alpine
+    container_name: desktop-agent-influxdb
+    ports:
+      - "8086:8086"
+    volumes:
+      - ./data/influxdb:/var/lib/influxdb2
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=adminpass123
+      - DOCKER_INFLUXDB_INIT_ORG=desktop-agent
+      - DOCKER_INFLUXDB_INIT_BUCKET=file-access
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=desktop-agent-token-123
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # TimescaleDB - PostgreSQL with Time Series Extension
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: desktop-agent-timescaledb
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data/timescaledb:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=desktopagent
+      - POSTGRES_PASSWORD=desktopagent123
+      - POSTGRES_DB=desktop_agent
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U desktopagent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Redis with RedisTimeSeries Module
+  redis:
+    image: redis/redis-stack-server:latest
+    container_name: desktop-agent-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/data
+    command: >
+      redis-server
+      --loadmodule /opt/redis-stack/lib/redisearch.so
+      --loadmodule /opt/redis-stack/lib/redistimeseries.so
+      --loadmodule /opt/redis-stack/lib/rejson.so
+      --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+networks:
+  default:
+    name: desktop-agent-network
+

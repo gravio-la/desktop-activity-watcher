@@ -1,0 +1,21 @@
+{
+  "name": "desktop-agent-daemon",
+  "version": "0.1.0",
+  "description": "Desktop Agent - Window tracking + file monitoring daemon",
+  "type": "module",
+  "scripts": {
+    "start": "./run.sh",
+    "start:direct": "bun run src/index.ts",
+    "dev": "bun --watch run src/index.ts",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "pino": "^8.16.2",
+    "pino-pretty": "^10.2.3"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^20.10.0"
+  }
+}
+

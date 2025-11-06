@@ -1,0 +1,33 @@
+# Desktop Agent Configuration Example
+# Set these environment variables before running the file monitor
+
+# Database Selection
+# Options: influxdb, timescaledb, redis
+DB_TYPE=influxdb
+
+# InfluxDB Configuration (default from docker-compose)
+INFLUXDB_URL=http://localhost:8086
+INFLUXDB_ORG=desktop-agent
+INFLUXDB_BUCKET=file-access
+INFLUXDB_TOKEN=desktop-agent-token-123
+
+# TimescaleDB Configuration (default from docker-compose)
+TIMESCALEDB_HOST=localhost
+TIMESCALEDB_PORT=5432
+TIMESCALEDB_DATABASE=desktop_agent
+TIMESCALEDB_USER=desktopagent
+TIMESCALEDB_PASSWORD=desktopagent123
+
+# Redis Configuration (default from docker-compose)
+REDIS_URL=redis://localhost:6379
+REDIS_KEY_PREFIX=desktop_agent:
+
+# File Monitor Configuration
+HOME_DIR=/home/yourusername
+BATCH_SIZE=100
+FLUSH_INTERVAL=5
+VERBOSE=false
+
+# Logging
+RUST_LOG=info
+

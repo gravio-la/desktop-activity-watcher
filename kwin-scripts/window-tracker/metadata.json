@@ -1,0 +1,21 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Email": "desktop-agent@example.com",
+                "Name": "Desktop Agent Project"
+            }
+        ],
+        "Category": "Accessibility",
+        "Description": "Tracks window activation events and logs process information for the Desktop Agent system",
+        "EnabledByDefault": false,
+        "Id": "window-tracker",
+        "License": "GPL",
+        "Name": "Window Activity Tracker",
+        "Version": "0.1.0",
+        "Website": ""
+    },
+    "X-Plasma-API": "javascript",
+    "X-Plasma-MainScript": "code/main.js"
+}
+
