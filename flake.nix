@@ -1,238 +1,476 @@
 {
-  description = "Desktop Agent Prototype - KWin scripting and eBPF file monitoring";
+  description = "Desktop Agent - Window tracking and file monitoring for KDE Plasma";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
   outputs = { self, nixpkgs, flake-utils }:
-    flake-utils.lib.eachDefaultSystem (system:
-      let
-        pkgs = import nixpkgs {
-          inherit system;
+    let
+      # Home Manager module
+      homeManagerModule = { config, lib, pkgs, ... }:
+        let
+          cfg = config.services.desktopAgent;
+          
+          # OpenSnoop wrapper that uses sudo
+          opensnoopWrapper = pkgs.writeShellScriptBin "opensnoop-user" ''
+            #!/usr/bin/env bash
+            exec ${pkgs.sudo}/bin/sudo ${pkgs.linuxPackages.bcc}/bin/opensnoop "$@"
+          '';
+          
+          # Build the KWin script package
+          kwinScript = pkgs.stdenv.mkDerivation {
+            pname = "kwin-window-tracker";
+            version = "0.1.0";
+            
+            src = ./kwin-scripts/window-tracker;
+            
+            dontBuild = true;
+            
+            installPhase = ''
+              runHook preInstall
+              
+              mkdir -p $out/share/kwin/scripts/window-tracker
+              cp -r contents $out/share/kwin/scripts/window-tracker/
+              cp metadata.json $out/share/kwin/scripts/window-tracker/
+              
+              runHook postInstall
+            '';
+            
+            meta = with lib; {
+              description = "KWin script to track window activations for Desktop Agent";
+              license = licenses.gpl2;
+              platforms = platforms.linux;
+            };
+          };
+          
+          # Build the daemon package
+          daemonPackage = pkgs.stdenv.mkDerivation {
+            pname = "desktop-agent-daemon";
+            version = "0.1.0";
+            
+            src = ./daemon;
+            
+            nativeBuildInputs = [ pkgs.bun ];
+            
+            buildPhase = ''
+              # Install dependencies
+              export HOME=$TMPDIR
+              bun install --frozen-lockfile --production
+            '';
+            
+            installPhase = ''
+              runHook preInstall
+              
+              mkdir -p $out/{bin,lib/desktop-agent}
+              
+              # Copy the entire daemon directory
+              cp -r . $out/lib/desktop-agent/
+              
+              # Create wrapper script that includes opensnoop-user in PATH
+              cat > $out/bin/desktop-agent-daemon <<EOF
+              #!${pkgs.bash}/bin/bash
+              export PATH="${opensnoopWrapper}/bin:\$PATH"
+              exec ${pkgs.bun}/bin/bun run $out/lib/desktop-agent/src/index.ts "\$@"
+              EOF
+              chmod +x $out/bin/desktop-agent-daemon
+              
+              runHook postInstall
+            '';
+            
+            meta = with lib; {
+              description = "Desktop Agent daemon for processing window and file events";
+              license = licenses.gpl2;
+              platforms = platforms.linux;
+            };
+          };
+          
+          # Generate configuration file
+          configJson = pkgs.writeText "desktop-agent-config.json" (builtins.toJSON {
+            monitoring = {
+              enabled = cfg.monitoring.enabled;
+              homeDirectory = cfg.monitoring.homeDirectory;
+              fileFilters = cfg.monitoring.fileFilters;
+              processFilters = cfg.monitoring.processFilters;
+            };
+            correlation = {
+              enabled = cfg.correlation.enabled;
+              correlateByPid = cfg.correlation.correlateByPid;
+            };
+            databases = {
+              influxdb = {
+                enabled = cfg.databases.influxdb.enable;
+              };
+              timescaledb = {
+                enabled = cfg.databases.timescaledb.enable;
+              };
+              jsonl = {
+                enabled = cfg.databases.jsonl.enable;
+                path = cfg.databases.jsonl.path;
+              };
+            };
+            logging = {
+              level = cfg.logging.level;
+              pretty = cfg.logging.pretty;
+            };
+          });
+          
+          # Generate environment file for database connections
+          envFile = pkgs.writeText "desktop-agent.env" ''
+            ${lib.optionalString cfg.databases.influxdb.enable ''
+              INFLUXDB_URL=${cfg.databases.influxdb.url}
+              INFLUXDB_ORG=${cfg.databases.influxdb.org}
+              INFLUXDB_BUCKET=${cfg.databases.influxdb.bucket}
+              INFLUXDB_TOKEN=${cfg.databases.influxdb.token}
+            ''}
+            ${lib.optionalString cfg.databases.timescaledb.enable ''
+              TIMESCALEDB_HOST=${cfg.databases.timescaledb.host}
+              TIMESCALEDB_PORT=${toString cfg.databases.timescaledb.port}
+              TIMESCALEDB_DATABASE=${cfg.databases.timescaledb.database}
+              TIMESCALEDB_USER=${cfg.databases.timescaledb.user}
+              TIMESCALEDB_PASSWORD=${cfg.databases.timescaledb.password}
+            ''}
+          '';
+        in
+        {
+          options.services.desktopAgent = {
+            enable = lib.mkEnableOption "Desktop Agent window and file monitoring";
+            
+            kwinScript = {
+              enable = lib.mkOption {
+                type = lib.types.bool;
+                default = true;
+                description = "Install and enable the KWin window tracking script";
+              };
+              
+              autoEnable = lib.mkOption {
+                type = lib.types.bool;
+                default = true;
+                description = "Automatically enable the script in KWin configuration";
+              };
+            };
+            
+            daemon = {
+              enable = lib.mkOption {
+                type = lib.types.bool;
+                default = true;
+                description = "Enable the desktop agent daemon service";
+              };
+            };
+            
+            monitoring = {
+              enabled = lib.mkOption {
+                type = lib.types.bool;
+                default = true;
+                description = "Enable file monitoring";
+              };
+              
+              homeDirectory = lib.mkOption {
+                type = lib.types.str;
+                default = "\${HOME}";
+                description = "Home directory to monitor";
+              };
+              
+              fileFilters = lib.mkOption {
+                type = lib.types.attrs;
+                default = {
+                  enabled = true;
+                  mode = "include";
+                  patterns = [ "~/daten/**" ];
+                  excludePatterns = [
+                    "**/.git/**"
+                    "**/node_modules/**"
+                    "**/.cache/**"
+                  ];
+                };
+                description = "File filtering configuration";
+              };
+              
+              processFilters = lib.mkOption {
+                type = lib.types.attrs;
+                default = {
+                  enabled = false;
+                  excludeProcesses = [];
+                };
+                description = "Process filtering configuration";
+              };
+            };
+            
+            correlation = {
+              enabled = lib.mkOption {
+                type = lib.types.bool;
+                default = true;
+                description = "Enable correlation between window and file events";
+              };
+              
+              correlateByPid = lib.mkOption {
+                type = lib.types.bool;
+                default = true;
+                description = "Correlate events by process ID";
+              };
+            };
+            
+            databases = {
+              influxdb = {
+                enable = lib.mkOption {
+                  type = lib.types.bool;
+                  default = false;
+                  description = "Enable InfluxDB backend";
+                };
+                
+                url = lib.mkOption {
+                  type = lib.types.str;
+                  default = "http://localhost:8086";
+                  description = "InfluxDB URL";
+                };
+                
+                org = lib.mkOption {
+                  type = lib.types.str;
+                  default = "desktop-agent";
+                  description = "InfluxDB organization";
+                };
+                
+                bucket = lib.mkOption {
+                  type = lib.types.str;
+                  default = "file-access";
+                  description = "InfluxDB bucket";
+                };
+                
+                token = lib.mkOption {
+                  type = lib.types.str;
+                  default = "desktop-agent-token-123";
+                  description = "InfluxDB authentication token";
+                };
+              };
+              
+              timescaledb = {
+                enable = lib.mkOption {
+                  type = lib.types.bool;
+                  default = false;
+                  description = "Enable TimescaleDB backend";
+                };
+                
+                host = lib.mkOption {
+                  type = lib.types.str;
+                  default = "localhost";
+                  description = "TimescaleDB host";
+                };
+                
+                port = lib.mkOption {
+                  type = lib.types.int;
+                  default = 5432;
+                  description = "TimescaleDB port";
+                };
+                
+                database = lib.mkOption {
+                  type = lib.types.str;
+                  default = "desktop_agent";
+                  description = "TimescaleDB database name";
+                };
+                
+                user = lib.mkOption {
+                  type = lib.types.str;
+                  default = "desktopagent";
+                  description = "TimescaleDB user";
+                };
+                
+                password = lib.mkOption {
+                  type = lib.types.str;
+                  default = "desktopagent123";
+                  description = "TimescaleDB password";
+                };
+              };
+              
+              jsonl = {
+                enable = lib.mkOption {
+                  type = lib.types.bool;
+                  default = true;
+                  description = "Enable JSONL file output";
+                };
+                
+                path = lib.mkOption {
+                  type = lib.types.str;
+                  default = "/tmp/desktop-agent-events.jsonl";
+                  description = "Path to JSONL output file";
+                };
+              };
+            };
+            
+            logging = {
+              level = lib.mkOption {
+                type = lib.types.enum [ "debug" "info" "warn" "error" ];
+                default = "info";
+                description = "Logging level";
+              };
+              
+              pretty = lib.mkOption {
+                type = lib.types.bool;
+                default = true;
+                description = "Enable pretty-printed logs";
+              };
+            };
+          };
+          
+          config = lib.mkIf cfg.enable {
+            # Install KWin script
+            home.file = lib.mkIf cfg.kwinScript.enable {
+              ".local/share/kwin/scripts/window-tracker" = {
+                source = "${kwinScript}/share/kwin/scripts/window-tracker";
+                recursive = true;
+              };
+            };
+            
+            # Auto-enable KWin script
+            programs.plasma = lib.mkIf (cfg.kwinScript.enable && cfg.kwinScript.autoEnable) {
+              configFile = {
+                kwinrc = {
+                  Plugins = {
+                    window-trackerEnabled = true;
+                  };
+                };
+              };
+            };
+            
+            # Create config directory and file
+            xdg.configFile."desktop-agent/config.json" = lib.mkIf cfg.daemon.enable {
+              source = configJson;
+            };
+            
+            # Systemd user service
+            systemd.user.services.desktop-agent = lib.mkIf cfg.daemon.enable {
+              Unit = {
+                Description = "Desktop Agent - Window and file monitoring daemon";
+                Documentation = "https://github.com/your-repo/desktop-agent";
+                After = [ "graphical-session.target" ];
+                PartOf = [ "graphical-session.target" ];
+              };
+              
+              Service = {
+                Type = "simple";
+                ExecStart = "${daemonPackage}/bin/desktop-agent-daemon";
+                Restart = "on-failure";
+                RestartSec = "5s";
+                
+                # Environment
+                Environment = [
+                  "CONFIG_PATH=%h/.config/desktop-agent/config.json"
+                  "PATH=${opensnoopWrapper}/bin:${pkgs.systemd}/bin:/run/wrappers/bin"
+                ];
+                EnvironmentFile = envFile;
+                
+                # Security hardening
+                PrivateTmp = true;
+                ProtectSystem = "strict";
+                ProtectHome = "read-only";
+                NoNewPrivileges = true;
+                
+                # Allow writing to temp and config directories
+                ReadWritePaths = [
+                  "/tmp"
+                  "%h/.config/desktop-agent"
+                  (lib.optionalString cfg.databases.jsonl.enable cfg.databases.jsonl.path)
+                ];
+                
+                # Logging
+                StandardOutput = "journal";
+                StandardError = "journal";
+                SyslogIdentifier = "desktop-agent";
+              };
+              
+              Install = {
+                WantedBy = [ "graphical-session.target" ];
+              };
+            };
+            
+            # Helper scripts and tools in user path
+            home.packages = lib.mkIf cfg.daemon.enable [
+              opensnoopWrapper  # opensnoop-user command for testing
+              
+              (pkgs.writeShellScriptBin "desktop-agent-status" ''
+                #!/usr/bin/env bash
+                echo "Desktop Agent Status"
+                echo "===================="
+                echo ""
+                systemctl --user status desktop-agent
+              '')
+              
+              (pkgs.writeShellScriptBin "desktop-agent-logs" ''
+                #!/usr/bin/env bash
+                journalctl --user -u desktop-agent -f
+              '')
+              
+              (pkgs.writeShellScriptBin "desktop-agent-query" ''
+                #!/usr/bin/env bash
+                ${daemonPackage}/bin/desktop-agent-daemon cli "$@"
+              '')
+            ];
+          };
         };
-
-        # Script to deploy KWin script
-        kwin-script-runner = pkgs.writeShellScriptBin "kwin-script-runner" ''
-          #!/usr/bin/env bash
-          set -e
-          
-          SCRIPT_DIR="$PWD/kwin-scripts/window-tracker"
-          INSTALL_DIR="$HOME/.local/share/kwin/scripts/window-tracker"
-          
-          echo "Desktop Agent - KWin Script Runner"
-          echo "==================================="
-          echo ""
-          
-          if [ ! -d "$SCRIPT_DIR" ]; then
-            echo "Error: KWin script directory not found at $SCRIPT_DIR"
-            exit 1
-          fi
-          
-          echo "Installing KWin script to $INSTALL_DIR..."
-          mkdir -p "$INSTALL_DIR"
-          cp -r "$SCRIPT_DIR"/* "$INSTALL_DIR/"
-          
-          echo "Script installed successfully!"
-          echo ""
-          echo "To enable the script:"
-          echo "1. Open System Settings > Window Management > KWin Scripts"
-          echo "2. Enable 'Window Activity Tracker'"
-          echo "3. Or run: kwriteconfig5 --file kwinrc --group Plugins --key window-trackerEnabled true"
-          echo "4. Then restart KWin: kwin_x11 --replace & (or kwin_wayland --replace &)"
-          echo ""
-          echo "To view script output:"
-          echo "  journalctl -f | grep kwin"
-        '';
-
-        # Script to run file monitor
-        file-monitor-runner = pkgs.writeShellScriptBin "file-monitor-runner" ''
-          #!/usr/bin/env bash
-          set -e
-          
-          echo "Desktop Agent - File Monitor Runner"
-          echo "===================================="
-          echo ""
-          
-          if [ ! -f "$PWD/file-monitor/target/release/file-monitor" ]; then
-            echo "Building file-monitor..."
-            cd "$PWD/file-monitor"
-            cargo build --release
-            cd ..
-          fi
-          
-          echo "Starting file monitor..."
-          echo "Note: This requires root privileges for eBPF"
-          echo ""
-          
-          sudo "$PWD/file-monitor/target/release/file-monitor" "$@"
-        '';
-
-        # Helper to check database status
-        db-status = pkgs.writeShellScriptBin "db-status" ''
-          #!/usr/bin/env bash
-          
-          echo "Desktop Agent - Database Status"
-          echo "================================"
-          echo ""
-          
-          # Check Docker
-          if ! command -v docker &> /dev/null; then
-            echo "Error: Docker is not installed or not in PATH"
-            exit 1
-          fi
-          
-          echo "Checking database containers..."
-          echo ""
-          
-          # Check InfluxDB
-          if docker ps | grep -q desktop-agent-influxdb; then
-            echo "✓ InfluxDB: Running (http://localhost:8086)"
-            echo "  - Organization: desktop-agent"
-            echo "  - Bucket: file-access"
-            echo "  - Token: desktop-agent-token-123"
-          else
-            echo "✗ InfluxDB: Not running"
-          fi
-          echo ""
-          
-          # Check TimescaleDB
-          if docker ps | grep -q desktop-agent-timescaledb; then
-            echo "✓ TimescaleDB: Running (postgresql://localhost:5432/desktop_agent)"
-            echo "  - User: desktopagent"
-            echo "  - Database: desktop_agent"
-          else
-            echo "✗ TimescaleDB: Not running"
-          fi
-          echo ""
-          
-          # Check Redis
-          if docker ps | grep -q desktop-agent-redis; then
-            echo "✓ Redis: Running (redis://localhost:6379)"
-            echo "  - Modules: RedisTimeSeries, RedisJSON, RediSearch"
-          else
-            echo "✗ Redis: Not running"
-          fi
-          echo ""
-          
-          echo "To start databases: docker-compose up -d"
-          echo "To stop databases: docker-compose down"
-        '';
-
+    in
+    {
+      # Export the Home Manager module
+      homeManagerModules.default = homeManagerModule;
+      homeManagerModules.desktopAgent = homeManagerModule;
+      
+    } // flake-utils.lib.eachDefaultSystem (system:
+      let
+        pkgs = import nixpkgs { inherit system; };
       in
       {
+        # Development shell for working on the daemon
         devShells.default = pkgs.mkShell {
           buildInputs = [
-            # KDE/Plasma dependencies
-            pkgs.kdePackages.kwin
-            pkgs.kdePackages.plasma-workspace
-            pkgs.kdePackages.kcoreaddons
-            pkgs.kdePackages.kconfig
-            pkgs.kdePackages.kdbusaddons
+            pkgs.bun
+            pkgs.nodejs
             
-            # eBPF tools and libraries
+            # eBPF tools (for file monitoring development)
             pkgs.bpftools
             pkgs.bpftrace
             pkgs.libbpf
-            pkgs.elfutils
-            pkgs.linuxPackages.bcc  # Provides opensnoop and other BCC tools
-            pkgs.python3Packages.bcc
             
-            # Build tools for eBPF
-            pkgs.clang
-            pkgs.llvm
-            pkgs.pkg-config
-            
-            # System monitoring tools
-            pkgs.linuxPackages.perf
-            pkgs.strace
-            pkgs.lsof
-            
-            # Rust toolchain
-            pkgs.rustc
-            pkgs.cargo
-            pkgs.rustfmt
-            pkgs.clippy
-            
-            # JavaScript/TypeScript runtime
-            pkgs.nodejs
-            pkgs.bun
-            
-            # Database clients
+            # Database clients for testing
             pkgs.influxdb2-cli
             pkgs.postgresql
-            pkgs.redis
             
             # Development utilities
             pkgs.jq
             pkgs.git
-            pkgs.docker-compose
-            
-            # Helper scripts
-            kwin-script-runner
-            file-monitor-runner
-            db-status
           ];
 
           shellHook = ''
-            echo "Desktop Agent Prototype Development Environment"
-            echo "==============================================="
+            echo "Desktop Agent Development Environment"
+            echo "====================================="
             echo ""
-            
-            # Check for opensnoop and show its location
-            OPENSNOOP_PATH=$(find ${pkgs.linuxPackages.bcc} -name opensnoop -type f 2>/dev/null | head -1)
-            if [ -n "$OPENSNOOP_PATH" ]; then
-              export PATH="$(dirname "$OPENSNOOP_PATH"):$PATH"
-              echo "✓ opensnoop available at: $OPENSNOOP_PATH"
-            fi
-            
+            echo "Daemon development:"
+            echo "  cd daemon && bun install"
+            echo "  cd daemon && bun run dev"
             echo ""
-            echo "Available tools:"
-            echo "  kwin-script-runner  - Deploy KWin window tracking script"
-            echo "  file-monitor-runner - Run eBPF file monitoring daemon"
-            echo "  db-status           - Check database container status"
+            echo "Testing the module:"
+            echo "  nix flake check"
             echo ""
-            echo "TypeScript Daemon (Bun):"
-            echo "  cd daemon && bun install       - Install dependencies"
-            echo "  cd daemon && bun run dev       - Run daemon in dev mode"
-            echo "  cd daemon && bun run start     - Run daemon (needs sudo)"
-            echo ""
-            echo "Database setup:"
-            echo "  docker-compose up -d  - Start all databases"
-            echo "  docker-compose down   - Stop all databases"
-            echo ""
-            echo "eBPF tools:"
-            echo "  opensnoop           - Track file opens (needs sudo)"
-            echo "  bpftrace            - Custom BPF scripts (needs sudo)"
-            echo ""
-            echo "⚠️  Important: eBPF tools require root privileges"
-            echo "   Run daemon with: sudo -E bun run start"
+            echo "Build KWin script package:"
+            echo "  nix build .#packages.${system}.kwin-window-tracker"
             echo ""
           '';
         };
-
-        apps = {
-          kwin-script-runner = {
-            type = "app";
-            program = "${kwin-script-runner}/bin/kwin-script-runner";
+        
+        # Packages for testing
+        packages = rec {
+          kwin-window-tracker = pkgs.stdenv.mkDerivation {
+            pname = "kwin-window-tracker";
+            version = "0.1.0";
+            src = ./kwin-scripts/window-tracker;
+            dontBuild = true;
+            installPhase = ''
+              mkdir -p $out/share/kwin/scripts/window-tracker
+              cp -r contents $out/share/kwin/scripts/window-tracker/
+              cp metadata.json $out/share/kwin/scripts/window-tracker/
+            '';
           };
           
-          file-monitor-runner = {
-            type = "app";
-            program = "${file-monitor-runner}/bin/file-monitor-runner";
-          };
-          
-          db-status = {
-            type = "app";
-            program = "${db-status}/bin/db-status";
-          };
-        };
-
-        packages = {
-          inherit kwin-script-runner file-monitor-runner db-status;
+          default = kwin-window-tracker;
         };
       }
     );
 }
-
