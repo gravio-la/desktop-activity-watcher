@@ -45,9 +45,10 @@
             };
           };
           
-          # Build the daemon package
-          daemonPackage = pkgs.stdenv.mkDerivation {
-            pname = "desktop-agent-daemon";
+          # Fetch dependencies as a fixed-output derivation (FOD)
+          # This allows network access during the build
+          daemonDeps = pkgs.stdenv.mkDerivation {
+            pname = "desktop-agent-deps";
             version = "0.1.0";
             
             src = ./daemon;
@@ -55,36 +56,66 @@
             nativeBuildInputs = [ pkgs.bun ];
             
             buildPhase = ''
-              # Install dependencies
               export HOME=$TMPDIR
-              bun install --frozen-lockfile --production
+              bun install --frozen-lockfile --no-progress
+            '';
+            
+            installPhase = ''
+              mkdir -p $out
+              cp -r node_modules $out/
+              cp -r src $out/
+              cp package.json $out/
+              cp bun.lockb $out/
+            '';
+            
+            outputHashMode = "recursive";
+            outputHashAlgo = "sha256";
+            outputHash = lib.fakeSha256;  # Will need to update this after first build
+          };
+          
+          # Build the daemon as a standalone binary using fetched dependencies
+          daemonBinary = pkgs.stdenv.mkDerivation {
+            pname = "desktop-agent-daemon-binary";
+            version = "0.1.0";
+            
+            src = ./daemon;
+            
+            nativeBuildInputs = [ pkgs.bun ];
+            
+            buildPhase = ''
+              # Copy pre-fetched dependencies
+              cp -r ${daemonDeps}/node_modules .
+              
+              # Build standalone executable (bundles everything, no node_modules needed at runtime)
+              export HOME=$TMPDIR
+              bun build --compile --minify src/index.ts --outfile desktop-agent-daemon
             '';
             
             installPhase = ''
               runHook preInstall
               
-              mkdir -p $out/{bin,lib/desktop-agent}
+              mkdir -p $out/bin
               
-              # Copy the entire daemon directory
-              cp -r . $out/lib/desktop-agent/
-              
-              # Create wrapper script that includes opensnoop-user in PATH
-              cat > $out/bin/desktop-agent-daemon <<EOF
-              #!${pkgs.bash}/bin/bash
-              export PATH="${opensnoopWrapper}/bin:\$PATH"
-              exec ${pkgs.bun}/bin/bun run $out/lib/desktop-agent/src/index.ts "\$@"
-              EOF
+              # Install the standalone binary
+              cp desktop-agent-daemon $out/bin/
               chmod +x $out/bin/desktop-agent-daemon
               
               runHook postInstall
             '';
             
             meta = with lib; {
-              description = "Desktop Agent daemon for processing window and file events";
+              description = "Desktop Agent daemon standalone binary";
               license = licenses.gpl2;
               platforms = platforms.linux;
             };
           };
+          
+          # Create wrapper that adds opensnoop-user to PATH
+          daemonPackage = pkgs.writeShellScriptBin "desktop-agent-daemon" ''
+            #!/usr/bin/env bash
+            export PATH="${opensnoopWrapper}/bin:$PATH"
+            exec ${daemonBinary}/bin/desktop-agent-daemon "$@"
+          '';
           
           # Generate configuration file
           configJson = pkgs.writeText "desktop-agent-config.json" (builtins.toJSON {
@@ -146,8 +177,8 @@
               
               autoEnable = lib.mkOption {
                 type = lib.types.bool;
-                default = true;
-                description = "Automatically enable the script in KWin configuration";
+                default = false;
+                description = "Automatically enable the script in KWin configuration (requires plasma-manager)";
               };
             };
             
@@ -321,16 +352,10 @@
               };
             };
             
-            # Auto-enable KWin script
-            programs.plasma = lib.mkIf (cfg.kwinScript.enable && cfg.kwinScript.autoEnable) {
-              configFile = {
-                kwinrc = {
-                  Plugins = {
-                    window-trackerEnabled = true;
-                  };
-                };
-              };
-            };
+            # Note: Auto-enable requires plasma-manager
+            # Users should manually enable the script in KWin settings:
+            # System Settings → Window Management → KWin Scripts → Enable "Window Activity Tracker"
+            # Or add plasma-manager to their flake inputs
             
             # Create config directory and file
             xdg.configFile."desktop-agent/config.json" = lib.mkIf cfg.daemon.enable {
@@ -358,19 +383,6 @@
                   "PATH=${opensnoopWrapper}/bin:${pkgs.systemd}/bin:/run/wrappers/bin"
                 ];
                 EnvironmentFile = envFile;
-                
-                # Security hardening
-                PrivateTmp = true;
-                ProtectSystem = "strict";
-                ProtectHome = "read-only";
-                NoNewPrivileges = true;
-                
-                # Allow writing to temp and config directories
-                ReadWritePaths = [
-                  "/tmp"
-                  "%h/.config/desktop-agent"
-                  (lib.optionalString cfg.databases.jsonl.enable cfg.databases.jsonl.path)
-                ];
                 
                 # Logging
                 StandardOutput = "journal";
@@ -442,15 +454,20 @@
             echo "Desktop Agent Development Environment"
             echo "====================================="
             echo ""
+            echo "⚠️  IMPORTANT: The daemon runs from source, not a built package."
+            echo "   Install dependencies first:"
+            echo "   cd daemon && bun install"
+            echo ""
             echo "Daemon development:"
-            echo "  cd daemon && bun install"
-            echo "  cd daemon && bun run dev"
+            echo "  cd daemon && bun run dev       # Development with hot reload"
+            echo "  cd daemon && bun run start     # Production mode"
             echo ""
-            echo "Testing the module:"
-            echo "  nix flake check"
+            echo "Testing:"
+            echo "  nix flake check                # Validate flake"
+            echo "  nix build .#kwin-window-tracker # Build KWin script"
             echo ""
-            echo "Build KWin script package:"
-            echo "  nix build .#packages.${system}.kwin-window-tracker"
+            echo "Database setup:"
+            echo "  docker-compose up -d           # Start InfluxDB & TimescaleDB"
             echo ""
           '';
         };

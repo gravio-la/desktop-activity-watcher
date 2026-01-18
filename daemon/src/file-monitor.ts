@@ -29,11 +29,19 @@ export class FileMonitor extends EventEmitter {
     }
 
     // Check if opensnoop is available
-    this.opensnoopCmd = await this.findOpensnoop() || '';
-    if (!this.opensnoopCmd) {
-      throw new Error(
-        'opensnoop not found. Install with: nix-shell or sudo apt install bpfcc-tools'
-      );
+    // Allow custom command via OPENSNOOP_CMD environment variable
+    const customCmd = process.env.OPENSNOOP_CMD;
+    
+    if (customCmd) {
+      this.opensnoopCmd = customCmd;
+      logger.info(`Using custom opensnoop command: ${customCmd}`);
+    } else {
+      this.opensnoopCmd = await this.findOpensnoop() || '';
+      if (!this.opensnoopCmd) {
+        throw new Error(
+          'opensnoop not found. Please ensure it is installed and in PATH, or set OPENSNOOP_CMD environment variable.'
+        );
+      }
     }
 
     this.running = true;
@@ -47,21 +55,19 @@ export class FileMonitor extends EventEmitter {
 
     logger.info(`Using opensnoop: ${this.opensnoopCmd}`);
     
-    // Check if we're already root
-    const isRoot = process.getuid?.() === 0;
+    // Parse the command if it contains spaces (e.g., "sudo /path/to/opensnoop")
+    const cmdParts = this.opensnoopCmd.split(' ');
+    const cmd = cmdParts[0];
+    const cmdArgs = cmdParts.slice(1);
     
-    if (isRoot) {
-      // Already root, just run it
-      this.process = spawn(this.opensnoopCmd, args, {
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-    } else {
-      // Not root, try to run with sudo
-      logger.warn('Not running as root, attempting to use sudo for opensnoop');
-      this.process = spawn('sudo', [this.opensnoopCmd, ...args], {
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-    }
+    // Combine command args with monitoring args
+    const fullArgs = [...cmdArgs, ...args];
+    
+    logger.info(`Spawning: ${cmd} ${fullArgs.join(' ')}`);
+    
+    this.process = spawn(cmd, fullArgs, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
 
     if (!this.process.stdout || !this.process.stderr) {
       throw new Error('Failed to capture process streams');
