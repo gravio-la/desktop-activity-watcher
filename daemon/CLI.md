@@ -94,7 +94,7 @@ bun run cli list --type file --since 5m --limit 10
 ────────────────────────────────────────────────────────────────────────────────
 1. [2025-11-06T13:05:15.123Z] file_accessed
    {
-     "filePath": "/home/basti/.config/Cursor/User/settings.json",
+     "filePath": "~/.config/Cursor/User/settings.json",
      "operation": "open",
      "processName": "cursor",
      "pid": 6695

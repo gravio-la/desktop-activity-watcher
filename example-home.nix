@@ -10,7 +10,7 @@
   
   # IMPORTANT: Before enabling, you must:
   # 1. Clone/download the desktop-agent repository
-  # 2. Run: cd /path/to/ebpf-experiments/daemon && bun install
+  # 2. Run: cd /path/to/desktop-activity-watcher/daemon && bun install
   # 3. Configure sudo in configuration.nix (see README.md)
   
   services.desktopAgent = {

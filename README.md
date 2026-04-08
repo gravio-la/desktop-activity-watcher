@@ -14,6 +14,13 @@ This work was carried out **in cooperation with an AI agent** as a way to **test
 - **Context detection:** sequences and co-occurrences of opens (often with window or app identity) help infer **current task or project** without reading file contents—useful for automation, summaries, or “resume where I left off” behavior.
 - **Modern assistants:** local or hybrid assistants (IDE tools, retrieval-augmented chat, coding agents) need **small, relevant context windows**. A recent-usage timeline is a strong, privacy-conscious signal for which files and folders to surface or embed—alongside classical search—so answers stay grounded in what the user is actually working with.
 
+## Documentation (mdBook)
+
+User and deployment guides live as an **[mdBook](https://rust-lang.github.io/mdBook/)** under [`doc/`](./doc/): configuration is in [`doc/book.toml`](./doc/book.toml); chapters are in [`doc/src/`](./doc/src/).
+
+- **Build locally:** `nix build .#book` (HTML in the Nix store) or `cd doc && mdbook build` / `mdbook serve` (after `nix develop`).
+- **GitHub Pages:** the workflow [`.github/workflows/mdbook-pages.yml`](./.github/workflows/mdbook-pages.yml) builds with Nix and deploys on pushes to `main` or `master`. In the repository **Settings → Pages**, set the source to **GitHub Actions**. The book is published at **[https://gravio-la.github.io/desktop-activity-watcher/](https://gravio-la.github.io/desktop-activity-watcher/)** (see [`site-url`](https://rust-lang.github.io/mdBook/format/configuration.html#html-renderer-options) in [`doc/book.toml`](./doc/book.toml)).
+
 ## 🚀 Quick Start with Home Manager
 
 The easiest way to use the Desktop Agent is through the provided Home Manager module.
@@ -34,8 +41,8 @@ The easiest way to use the Desktop Agent is through the provided Home Manager mo
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     home-manager.url = "github:nix-community/home-manager";
     
-    desktop-agent.url = "path:/path/to/ebpf-experiments";
-    # Or from git: desktop-agent.url = "github:yourusername/desktop-agent";
+    desktop-agent.url = "github:gravio-la/desktop-activity-watcher";
+    # Or a local checkout: desktop-agent.url = "path:/path/to/desktop-activity-watcher";
   };
 }
 ```
@@ -71,7 +78,7 @@ services.desktopAgent = {
 home-manager switch
 ```
 
-**📖 For detailed configuration options, see [HOME_MANAGER_MODULE.md](./HOME_MANAGER_MODULE.md)**
+**📖 For detailed configuration options, see the [Home Manager module chapter](./doc/src/home-manager-module.md)** (or the rendered book after `nix build .#book` / GitHub Pages).
 
 **💡 For a complete example, see [example-home.nix](./example-home.nix)**
 
@@ -131,7 +138,7 @@ Add to your `configuration.nix` to allow the daemon to run `opensnoop` without p
 
 Rebuild your system: `sudo nixos-rebuild switch`
 
-**See [SUDO_CONFIGURATION.md](./SUDO_CONFIGURATION.md) for detailed information.**
+**See [Sudo configuration](./doc/src/sudo-configuration.md) for detailed information.**
 
 ### Setup
 
@@ -142,7 +149,7 @@ The daemon runs from the source directory, so you need the repository available.
 2. **Install daemon dependencies:**
 
 ```bash
-cd /path/to/ebpf-experiments/daemon
+cd /path/to/desktop-activity-watcher/daemon
 bun install
 ```
 
@@ -151,7 +158,7 @@ bun install
 3. **Start databases (optional):**
 
 ```bash
-cd /path/to/ebpf-experiments
+cd /path/to/desktop-activity-watcher
 docker-compose up -d
 ```
 
@@ -296,7 +303,7 @@ HGETALL event:uuid-here
 Enter the development shell to work on the daemon or module:
 
 ```bash
-cd /path/to/ebpf-experiments
+cd /path/to/desktop-activity-watcher
 nix develop
 ```
 
@@ -333,9 +340,9 @@ The goal is to compare write and read performance across the three databases:
 ## Project Structure
 
 ```
-ebpf-experiments/
-├── flake.nix                      # Nix flake with Home Manager module
-├── HOME_MANAGER_MODULE.md         # Home Manager module documentation
+desktop-activity-watcher/
+├── flake.nix                      # Nix flake with Home Manager module + mdBook package (.#book)
+├── doc/                           # mdBook documentation (book.toml, src/)
 ├── example-home.nix               # Example configuration
 ├── docker-compose.yml             # Database services (Docker)
 ├── README.md                      # This file

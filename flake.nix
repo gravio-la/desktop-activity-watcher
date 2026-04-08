@@ -371,7 +371,7 @@
             systemd.user.services.desktop-agent = lib.mkIf cfg.daemon.enable {
               Unit = {
                 Description = "Desktop Agent - Window and file monitoring daemon";
-                Documentation = "https://github.com/your-repo/desktop-agent";
+                Documentation = "https://github.com/gravio-la/desktop-activity-watcher";
                 After = [ "graphical-session.target" ];
                 PartOf = [ "graphical-session.target" ];
               };
@@ -439,7 +439,8 @@
           buildInputs = [
             pkgs.bun
             pkgs.nodejs
-            
+            pkgs.mdbook
+
             # eBPF tools (for file monitoring development)
             pkgs.bpftools
             pkgs.bpftrace
@@ -469,6 +470,8 @@
             echo "Testing:"
             echo "  nix flake check                # Validate flake"
             echo "  nix build .#kwin-window-tracker # Build KWin script"
+            echo "  nix build .#book               # Build mdBook (doc/)"
+            echo "  cd doc && mdbook serve --open    # Preview documentation"
             echo ""
             echo "Database setup:"
             echo "  docker-compose up -d           # Start InfluxDB & TimescaleDB"
@@ -487,6 +490,25 @@
               mkdir -p $out/share/kwin/scripts/window-tracker
               cp -r contents $out/share/kwin/scripts/window-tracker/
               cp metadata.json $out/share/kwin/scripts/window-tracker/
+            '';
+          };
+
+          book = pkgs.stdenvNoCC.mkDerivation {
+            pname = "desktop-agent-book";
+            version = "0.1.0";
+            src = ./doc;
+            nativeBuildInputs = [ pkgs.mdbook ];
+            dontConfigure = true;
+            buildPhase = ''
+              runHook preBuild
+              mdbook build
+              runHook postBuild
+            '';
+            installPhase = ''
+              runHook preInstall
+              mkdir -p $out/share/doc/desktop-agent/html
+              cp -r book/* $out/share/doc/desktop-agent/html/
+              runHook postInstall
             '';
           };
           

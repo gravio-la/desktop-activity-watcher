@@ -14,6 +14,9 @@ Cargo.lock
 result
 result-*
 
+# mdBook output (built by `mdbook build` or `nix build .#book`)
+doc/book/
+
 # Development environments
 .direnv/
 .envrc

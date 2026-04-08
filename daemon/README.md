@@ -65,7 +65,7 @@ LOG_LEVEL=debug            # Logging level: debug, info, warn, error
 Example:
 
 ```bash
-sudo LOG_LEVEL=debug HOME=/home/basti bun run start
+sudo LOG_LEVEL=debug HOME=/home/average-joe bun run start
 ```
 
 ## Output
@@ -80,8 +80,8 @@ Pretty formatted logs with colors and timestamps:
 [13:45:23.789] 📂 Starting file monitor...
 [13:45:24.012] ✅ Desktop Agent Daemon is running
 [13:45:25.234] 🪟  Switched to: Cursor [Cursor] (PID: 6695)
-[13:45:26.456] 📂 File access: /home/basti/document.txt by cursor (PID: 6695)
-[13:45:26.457] 🔗 Correlated: Cursor accessed /home/basti/document.txt
+[13:45:26.456] 📂 File access: /home/average-joe/document.txt by cursor (PID: 6695)
+[13:45:26.457] 🔗 Correlated: Cursor accessed /home/average-joe/document.txt
 ```
 
 ### JSONL Log File
@@ -90,7 +90,7 @@ Each line is a JSON event:
 
 ```json
 {"type":"window_activated","timestamp":"2025-11-06T13:45:25.234Z","windowTitle":"Cursor","resourceClass":"Cursor","pid":6695,...}
-{"type":"file_accessed","timestamp":"2025-11-06T13:45:26.456Z","operation":"open","filePath":"/home/basti/document.txt","processName":"cursor","pid":6695,...}
+{"type":"file_accessed","timestamp":"2025-11-06T13:45:26.456Z","operation":"open","filePath":"/home/average-joe/document.txt","processName":"cursor","pid":6695,...}
 {"type":"correlated","timestamp":"2025-11-06T13:45:26.457Z","activeWindow":{...},"fileAccess":{...}}
 ```
 

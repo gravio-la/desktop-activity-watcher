@@ -7,7 +7,7 @@ Get the TypeScript daemon running in 3 steps!
 This provides all dependencies (Bun, opensnoop, qdbus, etc.):
 
 ```bash
-cd /home/basti/daten/Entwicklung/metadata-extraction/ebpf-experiments
+cd /path/to/desktop-activity-watcher
 nix develop
 ```
 
@@ -56,7 +56,7 @@ You should see:
 
 ```
 🚀 Desktop Agent Daemon starting...
-📁 Home directory: /home/basti
+📁 Home directory: /home/average-joe
 📝 Event log: /tmp/desktop-agent-events.jsonl
 🎯 Starting window tracker...
 ✓ Window tracker started
@@ -72,8 +72,8 @@ Switch between different applications and watch the logs:
 
 ```
 🪟  Switched to: Cursor [Cursor] (PID: 6695)
-📂 File access: /home/basti/document.txt by cursor (PID: 6695)
-🔗 Correlated: Cursor accessed /home/basti/document.txt
+📂 File access: /home/average-joe/document.txt by cursor (PID: 6695)
+🔗 Correlated: Cursor accessed /home/average-joe/document.txt
 ```
 
 ## View Captured Events

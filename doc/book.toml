@@ -1,0 +1,18 @@
+[book]
+title = "Desktop Agent Documentation"
+description = "Window tracking, eBPF file monitoring, and time-series storage for KDE Plasma."
+authors = ["Desktop Agent contributors"]
+language = "en"
+multilingual = false
+src = "src"
+
+[output.html]
+# GitHub Project Pages serves the site under /REPO_NAME/
+site-url = "/desktop-activity-watcher/"
+git-repository-url = "https://github.com/gravio-la/desktop-activity-watcher"
+# {path} is under doc/ in this mdBook version (e.g. src/introduction.md)
+edit-url-template = "https://github.com/gravio-la/desktop-activity-watcher/edit/main/doc/{path}"
+
+[build]
+build-dir = "book"
+create-missing = false
