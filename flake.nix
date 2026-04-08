@@ -13,11 +13,9 @@
         let
           cfg = config.services.desktopAgent;
           
-          # OpenSnoop wrapper that uses sudo
-          opensnoopWrapper = pkgs.writeShellScriptBin "opensnoop-user" ''
-            #!/usr/bin/env bash
-            exec ${pkgs.sudo}/bin/sudo ${pkgs.linuxPackages.bcc}/bin/opensnoop "$@"
-          '';
+          # OpenSnoop command - use system sudo (has setuid) not Nix store sudo
+          # System sudo is at /run/wrappers/bin/sudo and has the setuid bit set
+          opensnoopCmd = "/run/wrappers/bin/sudo ${pkgs.linuxPackages.bcc}/bin/opensnoop";
           
           # Build the KWin script package
           kwinScript = pkgs.stdenv.mkDerivation {
@@ -63,14 +61,14 @@
             installPhase = ''
               mkdir -p $out
               cp -r node_modules $out/
-              cp -r src $out/
-              cp package.json $out/
-              cp bun.lockb $out/
             '';
+            
+            # Disable fixup phase to avoid store path references in FOD
+            dontFixup = true;
             
             outputHashMode = "recursive";
             outputHashAlgo = "sha256";
-            outputHash = lib.fakeSha256;  # Will need to update this after first build
+            outputHash = "sha256-BxFY+fwxccpr8uYVEPXsZJrLBgoiOwbkeRjRbahADHU=";
           };
           
           # Build the daemon as a standalone binary using fetched dependencies
@@ -88,7 +86,11 @@
               
               # Build standalone executable (bundles everything, no node_modules needed at runtime)
               export HOME=$TMPDIR
-              bun build --compile --minify src/index.ts --outfile desktop-agent-daemon
+              echo "Building standalone binary..."
+              ls -la src/
+              bun build --compile --minify --sourcemap src/index.ts --outfile desktop-agent-daemon
+              echo "Build complete, checking output..."
+              ls -lh desktop-agent-daemon
             '';
             
             installPhase = ''
@@ -103,6 +105,9 @@
               runHook postInstall
             '';
             
+            # Don't strip the binary - it breaks Bun compiled executables
+            dontStrip = true;
+            
             meta = with lib; {
               description = "Desktop Agent daemon standalone binary";
               license = licenses.gpl2;
@@ -110,10 +115,10 @@
             };
           };
           
-          # Create wrapper that adds opensnoop-user to PATH
+          # Create wrapper that sets the opensnoop command
           daemonPackage = pkgs.writeShellScriptBin "desktop-agent-daemon" ''
             #!/usr/bin/env bash
-            export PATH="${opensnoopWrapper}/bin:$PATH"
+            export OPENSNOOP_CMD="${opensnoopCmd}"
             exec ${daemonBinary}/bin/desktop-agent-daemon "$@"
           '';
           
@@ -380,7 +385,7 @@
                 # Environment
                 Environment = [
                   "CONFIG_PATH=%h/.config/desktop-agent/config.json"
-                  "PATH=${opensnoopWrapper}/bin:${pkgs.systemd}/bin:/run/wrappers/bin"
+                  "OPENSNOOP_CMD=${opensnoopCmd}"
                 ];
                 EnvironmentFile = envFile;
                 
@@ -397,7 +402,6 @@
             
             # Helper scripts and tools in user path
             home.packages = lib.mkIf cfg.daemon.enable [
-              opensnoopWrapper  # opensnoop-user command for testing
               
               (pkgs.writeShellScriptBin "desktop-agent-status" ''
                 #!/usr/bin/env bash

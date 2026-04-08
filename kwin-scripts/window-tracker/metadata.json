@@ -6,7 +6,7 @@
                 "Name": "Desktop Agent Project"
             }
         ],
-        "Category": "Accessibility",
+        "Category": "Windows and Tasks",
         "Description": "Tracks window activation events and logs process information for the Desktop Agent system",
         "EnabledByDefault": false,
         "Id": "window-tracker",
@@ -14,6 +14,9 @@
         "Name": "Window Activity Tracker",
         "Version": "0.1.0",
         "Website": ""
+    },
+    "KPackage": {
+        "Type": "KWin/Script"
     },
     "X-Plasma-API": "javascript",
     "X-Plasma-MainScript": "code/main.js"
