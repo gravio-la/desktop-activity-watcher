@@ -1,4 +1,7 @@
 # Desktop Agent Prototype
+[![Deploy documentation (mdBook)](https://github.com/gravio-la/desktop-activity-watcher/actions/workflows/mdbook-pages.yml/badge.svg)](https://github.com/gravio-la/desktop-activity-watcher/actions/workflows/mdbook-pages.yml)
+[![built with garnix](https://img.shields.io/endpoint.svg?url=https%3A%2F%2Fgarnix.io%2Fapi%2Fbadges%2Fgravio-la%2Fdesktop-activity-watcher%3Fbranch%3Dmain)](https://garnix.io/repo/gravio-la/desktop-activity-watcher)
+
 
 A prototype desktop agent that tracks window focus, process activity, and file access using KWin JavaScript scripting and eBPF for Linux systems. The system stores events in time series databases for analysis and building a "heatmap" of file relevance.
 
