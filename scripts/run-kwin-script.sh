@@ -7,6 +7,16 @@ set -e
 SCRIPT_NAME="window-tracker"
 INSTALL_DIR="$HOME/.local/share/kwin/scripts/$SCRIPT_NAME"
 
+# Prefer qdbus6 (Plasma 6), fall back to qdbus
+if command -v qdbus6 >/dev/null 2>&1; then
+  QDBUS=qdbus6
+elif command -v qdbus >/dev/null 2>&1; then
+  QDBUS=qdbus
+else
+  echo "❌ Error: qdbus6 or qdbus not found in PATH"
+  exit 1
+fi
+
 echo "================================================"
 echo "KWin Window Tracker - Load & Run Script"
 echo "================================================"
@@ -27,18 +37,18 @@ fi
 
 # Check if KWin is running
 echo "🔍 Checking KWin status..."
-if ! qdbus org.kde.KWin /Scripting >/dev/null 2>&1; then
+if ! $QDBUS org.kde.KWin /Scripting >/dev/null 2>&1; then
     echo "❌ Error: KWin is not running or not accessible via DBus"
     echo "   Please make sure you are running KDE Plasma/KWin"
     exit 1
 fi
 
-echo "✅ KWin is running"
+echo "✅ KWin is running (using $QDBUS)"
 echo ""
 
 # Check if script is already loaded
 echo "🔍 Checking if script is already loaded..."
-IS_LOADED=$(qdbus org.kde.KWin /Scripting isScriptLoaded "$SCRIPT_NAME" 2>/dev/null || echo "false")
+IS_LOADED=$($QDBUS org.kde.KWin /Scripting isScriptLoaded "$SCRIPT_NAME" 2>/dev/null || echo "false")
 
 if [ "$IS_LOADED" = "true" ]; then
     echo "⚠️  Script is already loaded"
@@ -47,7 +57,7 @@ if [ "$IS_LOADED" = "true" ]; then
     echo ""
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         echo "🔄 Unloading existing script..."
-        qdbus org.kde.KWin /Scripting unloadScript "$SCRIPT_NAME" || true
+        $QDBUS org.kde.KWin /Scripting unloadScript "$SCRIPT_NAME" || true
         sleep 1
     else
         echo "ℹ️  Keeping existing script instance"
@@ -61,18 +71,18 @@ fi
 # Load the script
 echo "📥 Loading script..."
 SCRIPT_PATH="$INSTALL_DIR/contents/code/main.js"
-SCRIPT_ID=$(qdbus org.kde.KWin /Scripting loadScript "$SCRIPT_PATH" "$SCRIPT_NAME")
+SCRIPT_ID=$($QDBUS org.kde.KWin /Scripting loadScript "$SCRIPT_PATH" "$SCRIPT_NAME")
 
 if [ "$SCRIPT_ID" -eq 0 ] 2>/dev/null; then
-    echo "✅ Script loaded successfully (ID: $SCRIPT_ID)"
-else
     echo "❌ Error: Failed to load script"
     exit 1
 fi
 
+echo "✅ Script loaded successfully (ID: $SCRIPT_ID)"
+
 # Verify the script is loaded
 sleep 1
-IS_LOADED=$(qdbus org.kde.KWin /Scripting isScriptLoaded "$SCRIPT_NAME" 2>/dev/null || echo "false")
+IS_LOADED=$($QDBUS org.kde.KWin /Scripting isScriptLoaded "$SCRIPT_NAME" 2>/dev/null || echo "false")
 
 if [ "$IS_LOADED" = "true" ]; then
     echo "✅ Script is loaded and registered"
@@ -80,16 +90,16 @@ else
     echo "⚠️  Warning: Script loaded but verification failed"
 fi
 
-# Start the script
+# Start the script (Plasma 6 path: /Scripting/Script{id})
 echo "▶️  Starting script..."
 SCRIPT_DBUS_PATH="/Scripting/Script$SCRIPT_ID"
 
-if qdbus org.kde.KWin "$SCRIPT_DBUS_PATH" >/dev/null 2>&1; then
-    qdbus org.kde.KWin "$SCRIPT_DBUS_PATH" run
+if $QDBUS org.kde.KWin "$SCRIPT_DBUS_PATH" >/dev/null 2>&1; then
+    $QDBUS org.kde.KWin "$SCRIPT_DBUS_PATH" run
     echo "✅ Script is now running"
 else
-    echo "⚠️  Warning: Could not find script DBus path"
-    echo "   The script may still be running, check the logs"
+    echo "⚠️  Warning: Could not find script DBus path $SCRIPT_DBUS_PATH"
+    echo "   The script may still be running via kwinrc — check the logs"
 fi
 
 echo ""
@@ -106,8 +116,7 @@ echo "🔄 To reload the script:"
 echo "   $0"
 echo ""
 echo "🛑 To stop the script:"
-echo "   qdbus org.kde.KWin /Scripting unloadScript $SCRIPT_NAME"
+echo "   $QDBUS org.kde.KWin /Scripting unloadScript $SCRIPT_NAME"
 echo ""
 echo "💡 Tip: Switch between different windows to see events being logged"
 echo ""
-

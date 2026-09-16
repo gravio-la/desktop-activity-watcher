@@ -9,6 +9,14 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 SOURCE_DIR="$PROJECT_ROOT/kwin-scripts/window-tracker"
 INSTALL_DIR="$HOME/.local/share/kwin/scripts/window-tracker"
 
+if command -v qdbus6 >/dev/null 2>&1; then
+  QDBUS=qdbus6
+elif command -v qdbus >/dev/null 2>&1; then
+  QDBUS=qdbus
+else
+  QDBUS=""
+fi
+
 echo "================================================"
 echo "KWin Window Tracker - Deployment Script"
 echo "================================================"
@@ -62,7 +70,10 @@ else
 fi
 
 # Check if KWin is running
-if ! qdbus org.kde.KWin /Scripting >/dev/null 2>&1; then
+if [ -n "$QDBUS" ] && $QDBUS org.kde.KWin /Scripting >/dev/null 2>&1; then
+    echo ""
+    echo "✅ KWin is reachable via $QDBUS"
+else
     echo ""
     echo "⚠️  Warning: KWin is not running or not accessible via DBus"
     echo "   The script has been installed but cannot be loaded yet."
@@ -86,4 +97,3 @@ echo ""
 echo "  3. View logs with:"
 echo "     journalctl --user -f -u plasma-kwin_wayland.service | grep 'Window Activity Tracker'"
 echo ""
-
