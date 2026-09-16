@@ -10,6 +10,27 @@ const LOG_TO_CONSOLE = true;
 let previousWindow = null;
 
 /**
+ * Normalize Plasma activities to string IDs for JSON logging.
+ */
+function normalizeActivities(activities) {
+    if (!activities || !activities.length) {
+        return [];
+    }
+    var result = [];
+    for (var i = 0; i < activities.length; i++) {
+        var item = activities[i];
+        if (typeof item === "string") {
+            result.push(item);
+        } else if (item && item.id) {
+            result.push(String(item.id));
+        } else if (item) {
+            result.push(String(item));
+        }
+    }
+    return result;
+}
+
+/**
  * Extract process information from a window
  */
 function getWindowInfo(client) {
@@ -28,7 +49,7 @@ function getWindowInfo(client) {
             windowId: client.windowId || 0,
             desktop: client.desktop || -1,
             screen: client.screen || 0,
-            activities: client.activities || [],
+            activities: normalizeActivities(client.activities),
             geometry: {
                 x: client.x || 0,
                 y: client.y || 0,
