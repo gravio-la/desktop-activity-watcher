@@ -1,7 +1,7 @@
-{ pkgs, lib, root, cfg }:
+{ pkgs, lib, root, cfg, bccPackage }:
 
 let
-  opensnoopCmd = "/run/wrappers/bin/sudo ${pkgs.bcc}/bin/opensnoop";
+  opensnoopCmd = "/run/wrappers/bin/sudo ${bccPackage}/bin/opensnoop";
 
   kwinScript = pkgs.callPackage ../pkgs/kwin-window-tracker.nix {
     src = root + "/kwin-scripts/window-tracker";
@@ -38,6 +38,11 @@ let
       homeDirectory = cfg.monitoring.homeDirectory;
       fileFilters = cfg.monitoring.fileFilters;
       processFilters = cfg.monitoring.processFilters;
+      processIdentity = {
+        captureCommandLine = cfg.monitoring.processIdentity.captureCommandLine;
+      };
+    } // lib.optionalAttrs (cfg.monitoring.kwinJournalUnit != null) {
+      kwinJournalUnit = cfg.monitoring.kwinJournalUnit;
     };
     correlation = {
       enabled = cfg.correlation.enabled;

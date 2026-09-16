@@ -10,6 +10,11 @@ let
     ;
 
   kwriteconfig = "${pkgs.kdePackages.kconfig}/bin/kwriteconfig6";
+  qdbus6Bin = "${pkgs.kdePackages.qttools}/bin/qdbus6";
+  qdbusBin = "${pkgs.kdePackages.qttools}/bin/qdbus";
+  qdbus = if pkgs.lib.pathExists qdbus6Bin then qdbus6Bin else qdbusBin;
+
+  scriptMainJs = "$HOME/.local/share/kwin/scripts/window-tracker/contents/code/main.js";
 in
 {
   home.file = lib.mkIf cfg.kwinScript.enable {
@@ -23,16 +28,49 @@ in
     source = configJson;
   };
 
-  # Enable the KWin script in kwinrc when autoEnable is set
+  # Enable and load the KWin script when autoEnable is set
   home.activation.enableDesktopAgentKwinScript = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     ${lib.optionalString (cfg.kwinScript.enable && cfg.kwinScript.autoEnable) ''
+      set +e
       echo "desktop-agent: enabling KWin window-tracker script in kwinrc"
       ${kwriteconfig} --file kwinrc --group Plugins --key window-trackerEnabled true
-      if command -v qdbus6 >/dev/null 2>&1; then
-        qdbus6 org.kde.KWin /KWin reconfigure 2>/dev/null || true
-      elif command -v qdbus >/dev/null 2>&1; then
-        qdbus org.kde.KWin /KWin reconfigure 2>/dev/null || true
+
+      if ! ${qdbus} org.kde.KWin /Scripting >/dev/null 2>&1; then
+        echo "desktop-agent: KWin not reachable — script installed, enable on next login"
+        exit 0
       fi
+
+      if [ "${lib.boolToString cfg.kwinScript.forceReload}" = "true" ]; then
+        LOADED=$(${qdbus} org.kde.KWin /Scripting isScriptLoaded window-tracker 2>/dev/null || echo "false")
+        if [ "$LOADED" = "true" ]; then
+          echo "desktop-agent: unloading window-tracker for reload"
+          ${qdbus} org.kde.KWin /Scripting unloadScript window-tracker 2>/dev/null || true
+          sleep 1
+        fi
+      fi
+
+      ${qdbus} org.kde.KWin /KWin reconfigure 2>/dev/null || true
+      sleep 1
+
+      LOADED=$(${qdbus} org.kde.KWin /Scripting isScriptLoaded window-tracker 2>/dev/null || echo "false")
+      if [ "$LOADED" != "true" ]; then
+        echo "desktop-agent: loadScript window-tracker"
+        SCRIPT_PATH="${scriptMainJs}"
+        SCRIPT_ID=$(${qdbus} org.kde.KWin /Scripting loadScript "$SCRIPT_PATH" window-tracker 2>/dev/null || echo "0")
+        if [ "$SCRIPT_ID" != "0" ] && [ -n "$SCRIPT_ID" ]; then
+          ${qdbus} org.kde.KWin "/Scripting/Script$SCRIPT_ID" run 2>/dev/null || true
+        fi
+        sleep 1
+        LOADED=$(${qdbus} org.kde.KWin /Scripting isScriptLoaded window-tracker 2>/dev/null || echo "false")
+      fi
+
+      if [ "$LOADED" = "true" ]; then
+        echo "desktop-agent: window-tracker script is loaded"
+      else
+        echo "desktop-agent: WARNING — window-tracker script is NOT loaded"
+        echo "desktop-agent: run scripts/run-kwin-script.sh or enable in System Settings"
+      fi
+      set -e
     ''}
   '';
 
@@ -40,7 +78,11 @@ in
     Unit = {
       Description = "Desktop Agent - Window and file monitoring daemon";
       Documentation = "https://github.com/gravio-la/desktop-activity-watcher";
-      After = [ "graphical-session.target" ];
+      After = [
+        "graphical-session.target"
+        "plasma-kwin_wayland.service"
+        "plasma-kwin_x11.service"
+      ];
       PartOf = [ "graphical-session.target" ];
     };
 

@@ -16,6 +16,15 @@
         default = false;
         description = "Automatically enable the script in KWin configuration (requires plasma-manager)";
       };
+
+      forceReload = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = ''
+          On home-manager activation, unload and reload the window-tracker script when
+          KWin is reachable. Ensures script updates take effect without a full session restart.
+        '';
+      };
     };
 
     daemon = {
@@ -61,6 +70,34 @@
           excludeProcesses = [ ];
         };
         description = "Process filtering configuration";
+      };
+
+      kwinJournalUnit = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        example = "plasma-kwin_wayland.service";
+        description = ''
+          systemd user unit for KWin journal tailing. When null, the daemon auto-detects
+          plasma-kwin_wayland.service or plasma-kwin_x11.service at startup.
+        '';
+      };
+
+      processIdentity = lib.mkOption {
+        type = lib.types.submodule {
+          options = {
+            captureCommandLine = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = ''
+                Record /proc/{pid}/cmdline on file access events. Disabled by default
+                because argv may contain passwords, tokens, or other sensitive data.
+                Executable path (/proc/{pid}/exe) is always recorded when readable.
+              '';
+            };
+          };
+        };
+        default = { captureCommandLine = false; };
+        description = "How much process identity to attach to file access events";
       };
     };
 
