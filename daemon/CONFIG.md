@@ -19,7 +19,7 @@ The daemon searches for `config.json` in the following locations (in order):
 
 ## Quick Start
 
-### Example: Only Monitor ~/daten Directory
+### Example: Only Monitor ~/projects Directory
 
 ```json
 {
@@ -28,14 +28,14 @@ The daemon searches for `config.json` in the following locations (in order):
       "enabled": true,
       "mode": "include",
       "patterns": [
-        "~/daten/**"
+        "~/projects/**"
       ]
     }
   }
 }
 ```
 
-Save this as `daemon/config.json` and the daemon will only record file accesses within your `~/daten` directory.
+Save this as `daemon/config.json` and the daemon will only record file accesses within your `~/projects` directory.
 
 ## Complete Configuration
 
@@ -48,7 +48,7 @@ Save this as `daemon/config.json` and the daemon will only record file accesses 
       "enabled": true,
       "mode": "include",
       "patterns": [
-        "~/daten/**",
+        "~/projects/**",
         "~/Documents/**",
         "~/Projects/**"
       ],
@@ -138,7 +138,7 @@ Save this as `daemon/config.json` and the daemon will only record file accesses 
 - **Examples**:
   ```json
   "patterns": [
-    "~/daten/**",              // All files in ~/daten
+    "~/projects/**",              // All files in ~/projects
     "~/Documents/*.pdf",       // PDF files in Documents
     "~/Projects/**/src/**",    // Source files in Projects
     "$HOME/work/**"            // Using environment variable
@@ -214,11 +214,11 @@ Save this as `daemon/config.json` and the daemon will only record file accesses 
 ```json
 {
   "patterns": [
-    "~/daten/**",                    // Everything in ~/daten
+    "~/projects/**",                    // Everything in ~/projects
     "~/Documents/*.pdf",             // PDF files in Documents (not subdirs)
     "~/Projects/**/test/**",         // Test files in any project
     "$HOME/work/**/*.md",            // Markdown files in work directory
-    "~/daten/Entwicklung/**"         // Your development folder
+    "~/projects/src/**"         // Source tree under projects
   ],
   "excludePatterns": [
     "**/.git/**",                    // No git directories
@@ -241,7 +241,7 @@ Save this as `daemon/config.json` and the daemon will only record file accesses 
       "enabled": true,
       "mode": "include",
       "patterns": [
-        "~/daten/Entwicklung/**"
+        "~/projects/src/**"
       ],
       "excludePatterns": [
         "**/.git/**",
@@ -262,7 +262,7 @@ Save this as `daemon/config.json` and the daemon will only record file accesses 
     "fileFilters": {
       "enabled": true,
       "mode": "include",
-      "patterns": ["~/daten/**"],
+      "patterns": ["~/Documents/**"],
       "excludePatterns": [
         "**/*.mp3",
         "**/*.mp4",
@@ -282,7 +282,7 @@ Save this as `daemon/config.json` and the daemon will only record file accesses 
   "monitoring": {
     "fileFilters": {
       "enabled": true,
-      "patterns": ["~/daten/**"]
+      "patterns": ["~/projects/**"]
     },
     "processFilters": {
       "enabled": true,
@@ -325,7 +325,7 @@ sudo -E bun run start
 #   📋 File filters enabled:
 #      Mode: include
 #      Patterns: 1
-#        - ~/daten/**
+#        - ~/projects/**
 ```
 
 The daemon will log:
@@ -352,7 +352,7 @@ You can use environment variables in the config:
     "fileFilters": {
       "patterns": [
         "${WORK_DIR}/**",
-        "$HOME/daten/**"
+        "$HOME/projects/**"
       ]
     }
   }
@@ -388,7 +388,7 @@ ZodError: [
 
 ## Performance Tips
 
-1. **Use specific patterns**: `~/daten/**` is better than `$HOME/**`
+1. **Use specific patterns**: `~/projects/**` is better than `$HOME/**`
 2. **Exclude early**: Put common excludes first
 3. **Avoid too many patterns**: Each pattern is checked for every file access
 4. **Use extensions filter**: More efficient than pattern matching
@@ -413,7 +413,7 @@ Check if your patterns are too restrictive:
     "fileFilters": {
       "enabled": true,
       "mode": "include",
-      "patterns": ["~/daten/**"]
+      "patterns": ["~/projects/**"]
     }
   }
 }

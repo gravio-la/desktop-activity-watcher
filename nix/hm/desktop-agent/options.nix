@@ -53,7 +53,7 @@
         default = {
           enabled = true;
           mode = "include";
-          patterns = [ "~/daten/**" ];
+          patterns = [ "~/projects/**" ];
           excludePatterns = [
             "**/.git/**"
             "**/node_modules/**"

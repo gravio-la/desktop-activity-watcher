@@ -154,9 +154,9 @@ Requires NixOS `services.desktop-agent-timescale.enable = true` (or another Post
         enabled = true;
         mode = "include";
         patterns = [
-          "~/daten/**"
           "~/projects/**"
           "~/Documents/**"
+          "~/code/**"
         ];
         excludePatterns = [
           "**/.git/**"

@@ -172,7 +172,7 @@ services.desktopAgent = {
     patterns = [
       "~/Documents/**"
       "~/projects/**"
-      "~/daten/**"
+      "~/code/**"
     ];
     excludePatterns = [
       "**/.git/**"

@@ -7,7 +7,7 @@
       "enabled": true,
       "mode": "include",
       "patterns": [
-        "~/daten/**"
+        "~/projects/**"
       ],
       "excludePatterns": [
         "**/.git/**",

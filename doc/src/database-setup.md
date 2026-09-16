@@ -4,7 +4,7 @@ This guide explains how to set up and use the database integration for the Deskt
 
 ## Architecture
 
-**Recommended sink: TimescaleDB** — PostgreSQL with the Timescale extension. Events land in a JSONB hypertable (`desktop_agent_events`), which supports SQL joins, continuous aggregates, and matches the semantic-desktop composite-store pattern.
+**Recommended sink: TimescaleDB** — PostgreSQL with the Timescale extension. Events land in a JSONB hypertable (`desktop_agent_events`), which supports SQL joins, continuous aggregates, and works well alongside other local analytics stores.
 
 Optional backends (off by default):
 - **InfluxDB** — legacy / analytics experiments
@@ -13,9 +13,9 @@ Optional backends (off by default):
 
 Enable backends in `~/.config/desktop-agent/config.json` or via environment variables (`TIMESCALEDB_ENABLED`, `TIMESCALEDB_URL`, etc.). All adapters default to **disabled** unless explicitly enabled.
 
-### NixOS (recommended on windnix-T15g)
+### NixOS (recommended)
 
-System module `services.desktop-agent-timescale` runs PostgreSQL + Timescale on **port 5433** with peer auth for your user. Home Manager sets:
+System module `services.desktop-agent-timescale` runs PostgreSQL + Timescale on **port 5433** with peer auth for your login user. Home Manager sets:
 
 ```nix
 databases.timescaledb = {
@@ -23,7 +23,7 @@ databases.timescaledb = {
   host = "/run/postgresql";
   port = 5433;
   database = "desktop_agent";
-  user = "basti";
+  user = "yourusername";  # must match the OS account used for peer auth
   password = "";  # peer auth via Unix socket
 };
 ```

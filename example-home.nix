@@ -36,10 +36,10 @@
         
         # Monitor these paths
         patterns = [
-          "~/daten/**"           # Your data directory
           "~/projects/**"        # Projects
           "~/Documents/**"       # Documents
           "~/Downloads/**"       # Downloads
+          "~/code/**"            # Alternate source tree
         ];
         
         # Exclude these patterns

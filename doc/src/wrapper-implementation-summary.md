@@ -159,7 +159,7 @@ Edit `configuration.nix`:
 ```nix
 security.sudo.extraRules = [
   {
-    users = [ "average-joe" ];  # Your username!
+    users = [ "yourusername" ];  # replace with your login name
     commands = [
       {
         command = "${pkgs.linuxPackages.bcc}/bin/opensnoop";

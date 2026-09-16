@@ -1,17 +1,18 @@
 # File Filtering Configuration - Quick Start
 
-## ✅ IMPLEMENTED
+## Overview
 
-The Desktop Agent now supports JSON-based configuration with file path filtering!
+The Desktop Agent supports JSON-based configuration with file path filtering. Use include/exclude patterns to record only the paths you care about.
 
-## Your Use Case: Monitor Only ~/daten
+## Example: Monitor Only ~/projects
 
 ### Quick Setup
 
-1. **Copy the config file**:
+1. **Create a config file** (or copy and edit `config.example.json`):
    ```bash
    cd daemon
-   cp config.daten-only.json config.json
+   cp config.example.json config.json
+   # then edit patterns to match the directories you want to track
    ```
 
 2. **Start the daemon**:
@@ -25,7 +26,7 @@ The Desktop Agent now supports JSON-based configuration with file path filtering
    📋 File filters enabled:
       Mode: include
       Patterns: 1
-        - ~/daten/**
+        - ~/projects/**
    ```
 
 ### The Configuration
@@ -39,7 +40,7 @@ The Desktop Agent now supports JSON-based configuration with file path filtering
       "enabled": true,
       "mode": "include",
       "patterns": [
-        "~/daten/**"
+        "~/projects/**"
       ],
       "excludePatterns": [
         "**/.git/**",
@@ -55,46 +56,46 @@ The Desktop Agent now supports JSON-based configuration with file path filtering
 
 ## What Gets Recorded
 
-### ✅ Recorded
-- ✅ Any file access in `/home/average-joe/daten/`
-- ✅ Any subdirectory under `~/daten/`
-- ✅ All file operations (open, read, write, close)
+### Recorded
+- Any file access under `/home/alice/projects/`
+- Any subdirectory under `~/projects/`
+- All file operations (open, read, write, close)
 
-### ❌ Filtered Out
-- ❌ Files in `~/Documents/`
-- ❌ Files in `~/Downloads/`
-- ❌ Files in `~/.config/`
-- ❌ Git repositories (`**/.git/**`)
-- ❌ node_modules directories
-- ❌ Cache directories
-- ❌ Log files
+### Filtered Out
+- Files in `~/Documents/`
+- Files in `~/Downloads/`
+- Files in `~/.config/`
+- Git repositories (`**/.git/**`)
+- node_modules directories
+- Cache directories
+- Log files
 
 ## How It Works
 
 ### Before (No Filtering)
 ```
-File accessed: /home/average-joe/.config/chromium/cache/xyz   ✅ Recorded
-File accessed: /home/average-joe/Downloads/file.pdf          ✅ Recorded
-File accessed: /home/average-joe/daten/project/main.rs       ✅ Recorded
-File accessed: /home/average-joe/.cache/mozilla/temp         ✅ Recorded
+File accessed: /home/alice/.config/chromium/cache/xyz   ✅ Recorded
+File accessed: /home/alice/Downloads/file.pdf          ✅ Recorded
+File accessed: /home/alice/projects/demo/main.rs       ✅ Recorded
+File accessed: /home/alice/.cache/mozilla/temp         ✅ Recorded
 ```
 
 ### After (With Filtering)
 ```
-File accessed: /home/average-joe/.config/chromium/cache/xyz   ❌ Filtered
-File accessed: /home/average-joe/Downloads/file.pdf          ❌ Filtered
-File accessed: /home/average-joe/daten/project/main.rs       ✅ Recorded
-File accessed: /home/average-joe/.cache/mozilla/temp         ❌ Filtered
+File accessed: /home/alice/.config/chromium/cache/xyz   ❌ Filtered
+File accessed: /home/alice/Downloads/file.pdf          ❌ Filtered
+File accessed: /home/alice/projects/demo/main.rs       ✅ Recorded
+File accessed: /home/alice/.cache/mozilla/temp         ❌ Filtered
 ```
 
 ## Configuration Modes
 
-### Include Mode (Default for your case)
+### Include Mode
 ```json
 {
   "fileFilters": {
     "mode": "include",
-    "patterns": ["~/daten/**"]
+    "patterns": ["~/projects/**"]
   }
 }
 ```
@@ -133,7 +134,8 @@ The `Filtered events` count shows how many file accesses were excluded by your f
   "fileFilters": {
     "enabled": true,
     "patterns": [
-      "~/daten/Entwicklung/**"
+      "~/projects/**",
+      "~/src/**"
     ],
     "excludePatterns": [
       "**/node_modules/**",
@@ -149,7 +151,7 @@ The `Filtered events` count shows how many file accesses were excluded by your f
 {
   "fileFilters": {
     "enabled": true,
-    "patterns": ["~/daten/**"],
+    "patterns": ["~/projects/**"],
     "extensions": [".rs", ".ts", ".js", ".py", ".md"]
   }
 }
@@ -161,9 +163,9 @@ The `Filtered events` count shows how many file accesses were excluded by your f
   "fileFilters": {
     "enabled": true,
     "patterns": [
-      "~/daten/**",
+      "~/projects/**",
       "~/Documents/work/**",
-      "~/Projects/**"
+      "~/code/**"
     ]
   }
 }
@@ -188,15 +190,15 @@ Look for:
 📋 File filters enabled:
    Mode: include
    Patterns: 1
-     - ~/daten/**
+     - ~/projects/**
 ```
 
 ### 4. Access some files
 ```bash
-# Should be recorded (in ~/daten)
-touch ~/daten/test.txt
+# Should be recorded (in ~/projects)
+touch ~/projects/test.txt
 
-# Should NOT be recorded (outside ~/daten)
+# Should NOT be recorded (outside ~/projects)
 touch ~/Downloads/test.txt
 ```
 
@@ -211,7 +213,7 @@ When you stop the daemon (Ctrl+C), check:
 bun run cli list --since 5m --limit 10
 ```
 
-You should only see files from `~/daten/` in the results.
+You should only see files from `~/projects/` in the results.
 
 ## Environment Variables
 
@@ -231,11 +233,11 @@ sudo -E bun run start
 
 | Pattern | Matches | Example |
 |---------|---------|---------|
-| `~/daten/**` | Everything in ~/daten | `/home/user/daten/file.txt` |
-| `~/daten/*.txt` | TXT files in ~/daten (not subdirs) | `/home/user/daten/file.txt` |
-| `~/daten/**/src/**` | Source dirs anywhere | `/home/user/daten/project/src/main.rs` |
-| `**/.git/**` | Git directories anywhere | `/home/user/daten/project/.git/config` |
-| `**/node_modules/**` | node_modules anywhere | `/home/user/daten/web/node_modules/pkg` |
+| `~/projects/**` | Everything in ~/projects | `/home/user/projects/file.txt` |
+| `~/projects/*.txt` | TXT files in ~/projects (not subdirs) | `/home/user/projects/file.txt` |
+| `~/projects/**/src/**` | Source dirs under projects | `/home/user/projects/demo/src/main.rs` |
+| `**/.git/**` | Git directories anywhere | `/home/user/projects/demo/.git/config` |
+| `**/node_modules/**` | node_modules anywhere | `/home/user/projects/web/node_modules/pkg` |
 
 ## Implementation Details
 
@@ -273,7 +275,7 @@ sudo -E bun run start
 {
   "fileFilters": {
     "enabled": true,
-    "patterns": ["~/daten/**"]  // Make sure path is correct
+    "patterns": ["~/projects/**"]  // Make sure path is correct
   }
 }
 ```
@@ -281,7 +283,7 @@ sudo -E bun run start
 **Check 2**: Is the path correct?
 ```bash
 # Test the pattern
-ls ~/daten/  # Should show files
+ls ~/projects/  # Should show files
 ```
 
 **Check 3**: Disable filters temporarily
@@ -293,7 +295,7 @@ ls ~/daten/  # Should show files
 }
 ```
 
-### Still recording files outside ~/daten
+### Still recording files outside the include patterns
 
 **Check**: Make sure config file is loaded
 ```bash
@@ -316,19 +318,16 @@ If not shown, the config file isn't being loaded.
 
 Then check logs for:
 ```
-🚫 Filtered file: /home/average-joe/.config/...
+🚫 Filtered file: /home/alice/.config/...
 ```
 
-## Files Created
+## Related Files
 
 1. **`config.json`** - Your active configuration (copy from examples)
 2. **`config.example.json`** - Full example with all options
-3. **`config.daten-only.json`** - Minimal config for ~/daten only
-4. **`CONFIG.md`** - Complete configuration guide
+3. **`CONFIG.md`** - Complete configuration guide
 
 ---
 
-**Status**: ✅ Ready to use  
-**Your Config**: `config.daten-only.json`  
-**Action**: Copy to `config.json` and restart daemon
-
+**Status**: Ready to use  
+**Action**: Copy `config.example.json` to `config.json`, set your include patterns, and restart the daemon

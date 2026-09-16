@@ -56,7 +56,7 @@ You should see:
 
 ```
 🚀 Desktop Agent Daemon starting...
-📁 Home directory: /home/average-joe
+📁 Home directory: /home/alice
 📝 Event log: /tmp/desktop-agent-events.jsonl
 🎯 Starting window tracker...
 ✓ Window tracker started
@@ -72,8 +72,8 @@ Switch between different applications and watch the logs:
 
 ```
 🪟  Switched to: Cursor [Cursor] (PID: 6695)
-📂 File access: /home/average-joe/document.txt by cursor (PID: 6695)
-🔗 Correlated: Cursor accessed /home/average-joe/document.txt
+📂 File access: /home/alice/document.txt by cursor (PID: 6695)
+🔗 Correlated: Cursor accessed /home/alice/document.txt
 ```
 
 ## View Captured Events
