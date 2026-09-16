@@ -190,6 +190,8 @@ All events are validated using Zod schemas before being written to databases.
 2. **File Event** (`file_accessed`)
    - File path, operation (open/read/write/close)
    - Process name, PID, UID
+   - Process executable path (`/proc/{pid}/exe`, always when readable)
+   - Process command line (optional; `monitoring.processIdentity.captureCommandLine`, off by default)
    - File descriptor, flags
 
 3. **Correlated Event** (`correlated`)

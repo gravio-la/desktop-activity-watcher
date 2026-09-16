@@ -375,14 +375,15 @@ Alternatively, configure databases in your `configuration.nix`:
    - System Settings → Window Management → KWin Scripts
    - Enable "Window Activity Tracker"
 
-3. Restart KWin:
+3. Reload KWin configuration (Wayland — do not use `kwin_x11 --replace` on a Wayland session):
    ```bash
-   kwin_x11 --replace &
+   qdbus6 org.kde.KWin /KWin reconfigure
    ```
+   Or run `./scripts/run-kwin-script.sh` from the ebpf-experiments repo.
 
 4. Check logs:
    ```bash
-   journalctl -f | grep -i kwin
+   journalctl --user -u plasma-kwin_wayland.service -f | grep 'Window Activity Tracker'
    ```
 
 ### Daemon Not Starting
