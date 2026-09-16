@@ -1,17 +1,31 @@
 /**
- * Resolve process group (TGID) and process name from /proc for opensnoop thread PIDs.
+ * Resolve process group (TGID), executable path, and optional command line from /proc
+ * for opensnoop thread PIDs.
  */
 
 import { readFileSync, readlinkSync } from 'fs';
 import { basename } from 'path';
 
+export interface ProcessResolveOptions {
+  /** When true, read /proc/{tgid}/cmdline (may contain secrets; off by default). */
+  captureCommandLine?: boolean;
+}
+
 export interface ProcessInfo {
   tgid: number;
   processName: string;
   threadComm: string;
+  /** Resolved /proc/{tgid}/exe path when readable. */
+  processExecutablePath?: string;
+  /** Full argv joined with spaces; only present when captureCommandLine is enabled. */
+  processCommandLine?: string;
 }
 
-const cache = new Map<number, ProcessInfo>();
+const cache = new Map<string, ProcessInfo>();
+
+function cacheKey(threadPid: number, options: ProcessResolveOptions): string {
+  return `${threadPid}:${options.captureCommandLine ? 'cmd' : 'nocmd'}`;
+}
 
 function readText(path: string): string | null {
   try {
@@ -21,11 +35,42 @@ function readText(path: string): string | null {
   }
 }
 
+/** Format null-separated /proc/cmdline bytes into a single display string. */
+export function formatCmdline(raw: string): string | undefined {
+  const parts = raw.split('\0').filter(Boolean);
+  if (parts.length === 0) {
+    return undefined;
+  }
+  return parts.join(' ');
+}
+
+function readExecutablePath(tgid: number): string | undefined {
+  try {
+    return readlinkSync(`/proc/${tgid}/exe`);
+  } catch {
+    return undefined;
+  }
+}
+
+function readCommandLine(tgid: number): string | undefined {
+  const raw = readText(`/proc/${tgid}/cmdline`);
+  if (!raw) {
+    return undefined;
+  }
+  return formatCmdline(raw);
+}
+
 /**
- * Resolve TGID and process name for a thread PID. Results are cached per thread PID.
+ * Resolve TGID, process name, and executable path for a thread PID.
+ * Command line is read only when captureCommandLine is true.
  */
-export function resolveProcessInfo(threadPid: number, threadComm: string): ProcessInfo {
-  const cached = cache.get(threadPid);
+export function resolveProcessInfo(
+  threadPid: number,
+  threadComm: string,
+  options: ProcessResolveOptions = {},
+): ProcessInfo {
+  const key = cacheKey(threadPid, options);
+  const cached = cache.get(key);
   if (cached) {
     return cached;
   }
@@ -42,26 +87,31 @@ export function resolveProcessInfo(threadPid: number, threadComm: string): Proce
     }
   }
 
+  const processExecutablePath = readExecutablePath(tgid);
+
   let processName = threadComm.trim() || 'unknown';
   const comm = readText(`/proc/${tgid}/comm`);
   if (comm) {
     processName = comm.trim();
-  } else {
-    try {
-      const exePath = readlinkSync(`/proc/${tgid}/exe`);
-      processName = basename(exePath);
-    } catch {
-      // keep thread comm fallback
-    }
+  } else if (processExecutablePath) {
+    processName = basename(processExecutablePath);
   }
 
   const info: ProcessInfo = {
     tgid,
     processName,
     threadComm: threadComm.trim(),
+    processExecutablePath,
   };
 
-  cache.set(threadPid, info);
+  if (options.captureCommandLine) {
+    const processCommandLine = readCommandLine(tgid);
+    if (processCommandLine) {
+      info.processCommandLine = processCommandLine;
+    }
+  }
+
+  cache.set(key, info);
   return info;
 }
 

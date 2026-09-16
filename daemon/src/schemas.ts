@@ -37,12 +37,15 @@ export const FileEventSchema = z.object({
   operation: z.enum(['open', 'read', 'write', 'close']),
   filePath: z.string(),
   processName: z.string(),
+  processExecutablePath: z.string().optional(),
+  processCommandLine: z.string().optional(),
   pid: z.number().int().nonnegative(),
   threadPid: z.number().int().nonnegative().optional(),
   threadComm: z.string().optional(),
   uid: z.number().int().nonnegative(),
   fd: z.number().int().nonnegative().optional(),
   flags: z.string().optional(),
+  accessMode: z.enum(['read', 'write', 'readwrite']).optional(),
 });
 
 // Correlated event (window + file access)
@@ -58,6 +61,8 @@ export const CorrelatedEventSchema = z.object({
     path: z.string(),
     operation: z.string(),
     process: z.string(),
+    processExecutablePath: z.string().optional(),
+    processCommandLine: z.string().optional(),
     pid: z.number().int().nonnegative(),
   }).optional(),
 });

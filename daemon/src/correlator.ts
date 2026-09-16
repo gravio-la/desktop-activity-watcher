@@ -85,14 +85,16 @@ export class EventCorrelator {
   }
 
   handleWindowEvent(event: WindowEvent): void {
+    this.stats.windowEvents++;
+
     if (event.pid < 0) {
       this.stats.skippedWindowEvents++;
-      logger.debug(`🚫 Skipped window event with invalid PID: ${event.windowTitle}`);
-      return;
+      logger.info(
+        `🪟 Window without PID (no correlation): ${event.windowTitle} [${event.resourceClass}]`
+      );
+    } else {
+      this.currentWindow = event;
     }
-
-    this.currentWindow = event;
-    this.stats.windowEvents++;
 
     this.writeEvent({
       type: 'window_activated',
@@ -122,7 +124,13 @@ export class EventCorrelator {
     const correlationEnabled = this.config.correlation?.enabled !== false;
     const correlateByPid = this.config.correlation?.correlateByPid !== false;
 
-    if (correlationEnabled && correlateByPid && this.currentWindow && event.pid === this.currentWindow.pid) {
+    if (
+      correlationEnabled &&
+      correlateByPid &&
+      this.currentWindow &&
+      this.currentWindow.pid >= 0 &&
+      event.pid === this.currentWindow.pid
+    ) {
       this.stats.correlatedEvents++;
 
       const correlated: CorrelatedEvent = {
@@ -136,6 +144,8 @@ export class EventCorrelator {
           path: event.filePath,
           operation: event.operation,
           process: event.processName,
+          processExecutablePath: event.processExecutablePath,
+          processCommandLine: event.processCommandLine,
           pid: event.pid,
         },
       };

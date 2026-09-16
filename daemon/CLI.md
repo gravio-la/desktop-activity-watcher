@@ -148,6 +148,10 @@ File access events from eBPF/opensnoop.
 - `filePath` - Path to the accessed file
 - `operation` - Type: open, read, write, close
 - `processName` - Name of the process
+- `processExecutablePath` - Resolved `/proc/{pid}/exe` path (when readable)
+- `processCommandLine` - Full argv (only when `monitoring.processIdentity.captureCommandLine` is true)
+- `flags` - Open flags from opensnoop `-e` (e.g. `O_RDONLY`, `O_WRONLY|O_CREAT`)
+- `accessMode` - Derived coarse mode: `read`, `write`, or `readwrite`
 - `pid` - Process ID
 - `uid` - User ID
 

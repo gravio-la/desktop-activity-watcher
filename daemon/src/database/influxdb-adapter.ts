@@ -101,6 +101,15 @@ export class InfluxDBAdapter implements DatabaseAdapter {
     if (event.flags) {
       point.stringField('flags', event.flags);
     }
+    if (event.processExecutablePath) {
+      point.stringField('process_executable_path', event.processExecutablePath);
+    }
+    if (event.processCommandLine) {
+      point.stringField('process_command_line', event.processCommandLine);
+    }
+    if (event.accessMode) {
+      point.tag('access_mode', event.accessMode);
+    }
 
     return point;
   }
@@ -121,6 +130,12 @@ export class InfluxDBAdapter implements DatabaseAdapter {
       point.tag('process_name', event.fileAccess.process);
       point.stringField('file_path', event.fileAccess.path);
       point.intField('file_pid', event.fileAccess.pid);
+      if (event.fileAccess.processExecutablePath) {
+        point.stringField('process_executable_path', event.fileAccess.processExecutablePath);
+      }
+      if (event.fileAccess.processCommandLine) {
+        point.stringField('process_command_line', event.fileAccess.processCommandLine);
+      }
     }
 
     return point;

@@ -26,8 +26,34 @@ describe('parseOpensnoopLine', () => {
     expect(parsed!.filePath).toBe('/home/basti/file');
   });
 
+  test('parses -T -U line without FLAGS column (kernel 6.12+ safe)', () => {
+    const line =
+      '0.007656000   1000  800895 cursor             -1   2 /home/basti/daten/project/readme.md';
+    const parsed = parseOpensnoopLine(line);
+
+    expect(parsed).not.toBeNull();
+    expect(parsed!.uid).toBe(1000);
+    expect(parsed!.threadPid).toBe(800895);
+    expect(parsed!.comm).toBe('cursor');
+    expect(parsed!.fd).toBe(-1);
+    expect(parsed!.err).toBe('2');
+    expect(parsed!.flags).toBe('');
+    expect(parsed!.filePath).toBe('/home/basti/daten/project/readme.md');
+  });
+
+  test('parses successful open (ERR=0) without flags', () => {
+    const line =
+      '0.009434000   1000  4162172 ThreadPoolForeg    36   0 /home/basti/daten/scores/symphony.pdf';
+    const parsed = parseOpensnoopLine(line);
+
+    expect(parsed!.err).toBe('0');
+    expect(parsed!.flags).toBe('');
+    expect(parsed!.filePath).toBe('/home/basti/daten/scores/symphony.pdf');
+  });
+
   test('returns null for header lines', () => {
     expect(parseOpensnoopLine('TIME(s) UID PID COMM FD ERR FLAGS PATH')).toBeNull();
+    expect(parseOpensnoopLine('TIME(s)       UID   PID    COMM               FD ERR PATH')).toBeNull();
     expect(parseOpensnoopLine('---')).toBeNull();
     expect(parseOpensnoopLine('')).toBeNull();
   });

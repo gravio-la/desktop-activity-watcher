@@ -113,10 +113,18 @@ async function main() {
     const dbWriter = adapters.length > 0 ? new DatabaseWriter(adapters) : null;
 
     const correlator = new EventCorrelator(logFile, dbWriter, dbConfig.keepJsonl, appConfig);
-    const windowTracker = new WindowTracker();
+    const windowTracker = new WindowTracker(appConfig.monitoring.kwinJournalUnit);
+
+    const captureCommandLine =
+      appConfig.monitoring.processIdentity?.captureCommandLine ?? false;
+    if (captureCommandLine) {
+      logger.warn(
+        '⚠️  processIdentity.captureCommandLine is enabled — argv may contain sensitive data'
+      );
+    }
 
     const homeDir = expandEnvVars(appConfig.monitoring.homeDirectory);
-    const fileMonitor = new FileMonitor(homeDir);
+    const fileMonitor = new FileMonitor(homeDir, { captureCommandLine });
 
     await correlator.init();
 

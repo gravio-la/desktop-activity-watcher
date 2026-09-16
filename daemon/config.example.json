@@ -18,6 +18,9 @@
     "processFilters": {
       "enabled": false,
       "excludeProcesses": []
+    },
+    "processIdentity": {
+      "captureCommandLine": false
     }
   },
   "correlation": {

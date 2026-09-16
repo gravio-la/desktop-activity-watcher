@@ -9,18 +9,21 @@ import { EventEmitter } from 'events';
 import { logger } from './logger';
 import type { FileEvent } from './types';
 import { parseOpensnoopLine } from './opensnoop-parser';
-import { resolveProcessInfo } from './proc-info';
+import { accessModeFromFlags } from './access-mode';
+import { resolveProcessInfo, type ProcessResolveOptions } from './proc-info';
 
 export class FileMonitor extends EventEmitter {
   private process: ChildProcess | null = null;
   private running = false;
   private homeDir: string;
+  private processResolveOptions: ProcessResolveOptions;
   private eventCount = 0;
   private opensnoopCmd: string = '';
 
-  constructor(homeDir: string) {
+  constructor(homeDir: string, processResolveOptions: ProcessResolveOptions = {}) {
     super();
     this.homeDir = homeDir;
+    this.processResolveOptions = processResolveOptions;
   }
 
   async start(): Promise<void> {
@@ -45,9 +48,11 @@ export class FileMonitor extends EventEmitter {
 
     this.running = true;
 
-    // -T timestamps, -U UID, -F open flags (O_RDONLY etc.)
-    // Output: TIME(s) UID PID COMM(16) FD ERR FLAGS PATH
-    const args = ['-T', '-U', '-F'];
+    // -T timestamps, -U UID. Omit -F (--full-path): that code path includes kernel-internal
+    // headers (fs_struct.h, dcache.h) and fails when bcc only has uapi headers (common on NixOS
+    // with pkgs.bcc). Basename in PATH is enough for our include filters under ~/daten/**.
+    // Open flags need -e (not -F, which is full-path and breaks on NixOS bcc builds).
+    const args = ['-T', '-U', '-e'];
 
     logger.info(`Using opensnoop: ${this.opensnoopCmd}`);
 
@@ -100,7 +105,7 @@ export class FileMonitor extends EventEmitter {
           logger.info('File monitor stopped cleanly');
         } else if (code === 2) {
           logger.error('File monitor exited with code 2 (likely argument or permission issue)');
-          logger.error('Try running manually: sudo ' + this.opensnoopCmd + ' -T -U -F');
+          logger.error('Try running manually: sudo ' + this.opensnoopCmd + ' -T -U');
         } else {
           logger.error(`File monitor process exited with code ${code}`);
         }
@@ -209,7 +214,9 @@ export class FileMonitor extends EventEmitter {
       return null;
     }
 
-    const proc = resolveProcessInfo(threadPid, comm);
+    const proc = resolveProcessInfo(threadPid, comm, this.processResolveOptions);
+
+    const accessMode = accessModeFromFlags(flags);
 
     const event: FileEvent = {
       type: 'file_accessed',
@@ -217,17 +224,22 @@ export class FileMonitor extends EventEmitter {
       operation: 'open',
       filePath,
       processName: proc.processName,
+      processExecutablePath: proc.processExecutablePath,
+      processCommandLine: proc.processCommandLine,
       pid: proc.tgid,
       threadPid,
       threadComm: proc.threadComm,
       uid,
       fd,
       flags,
+      accessMode,
     };
 
     this.eventCount++;
     logger.debug(
-      `📂 File access: ${filePath} by ${proc.processName} (TGID: ${proc.tgid}, thread: ${threadPid})`
+      `📂 File access: ${filePath} by ${proc.processName}` +
+        (proc.processExecutablePath ? ` (${proc.processExecutablePath})` : '') +
+        ` (TGID: ${proc.tgid}, thread: ${threadPid})`
     );
 
     return event;

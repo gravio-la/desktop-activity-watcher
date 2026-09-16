@@ -66,6 +66,9 @@ Save this as `daemon/config.json` and the daemon will only record file accesses 
       "enabled": false,
       "includeProcesses": ["cursor", "code", "firefox"],
       "excludeProcesses": ["kwin_wayland", "plasmashell"]
+    },
+    "processIdentity": {
+      "captureCommandLine": false
     }
   },
   "correlation": {
@@ -190,6 +193,11 @@ Save this as `daemon/config.json` and the daemon will only record file accesses 
   ```json
   "excludeProcesses": ["kwin_wayland", "plasmashell", "systemd"]
   ```
+
+#### `monitoring.processIdentity.captureCommandLine`
+- **Type**: `boolean`
+- **Default**: `false`
+- **Description**: When `true`, record `/proc/{pid}/cmdline` on each file access event. **Disabled by default** because argv may contain passwords, API tokens, or file paths you did not intend to log. The executable path (`/proc/{pid}/exe` → `processExecutablePath`) is always recorded when readable, which is enough to distinguish same-named binaries on NixOS.
 
 ## Pattern Syntax
 

@@ -27,6 +27,10 @@ export interface FileEvent {
   operation: 'open' | 'read' | 'write' | 'close';
   filePath: string;
   processName: string;
+  /** Resolved /proc/{pid}/exe path when readable */
+  processExecutablePath?: string;
+  /** Full argv; only recorded when monitoring.processIdentity.captureCommandLine is true */
+  processCommandLine?: string;
   /** Process group ID (TGID) — matches KWin window PID for correlation */
   pid: number;
   /** Thread PID from opensnoop (may differ from pid) */
@@ -36,6 +40,8 @@ export interface FileEvent {
   uid: number;
   fd?: number;
   flags?: string;
+  /** Coarse read/write intent derived from open() flags when opensnoop -e is enabled. */
+  accessMode?: 'read' | 'write' | 'readwrite';
 }
 
 export interface CorrelatedEvent {
@@ -49,6 +55,8 @@ export interface CorrelatedEvent {
     path: string;
     operation: string;
     process: string;
+    processExecutablePath?: string;
+    processCommandLine?: string;
     pid: number;
   };
 }

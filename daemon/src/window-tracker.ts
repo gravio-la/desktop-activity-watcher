@@ -8,12 +8,23 @@ import { spawn, type ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import { logger } from './logger';
 import type { WindowEvent } from './types';
+import { resolveKwinJournalUnit, type KwinJournalUnit } from './kwin-journal';
+
+const HEALTH_CHECK_MS = 60_000;
 
 export class WindowTracker extends EventEmitter {
   private process: ChildProcess | null = null;
   private running = false;
   private lastPid: number | null = null;
   private lastApp: string | null = null;
+  private journalUnit: KwinJournalUnit;
+  private linesReceived = 0;
+  private healthTimer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(journalUnit?: string) {
+    super();
+    this.journalUnit = resolveKwinJournalUnit(journalUnit);
+  }
 
   async start(): Promise<void> {
     if (this.running) {
@@ -22,13 +33,14 @@ export class WindowTracker extends EventEmitter {
     }
 
     this.running = true;
+    this.linesReceived = 0;
 
     const realUser = process.env.SUDO_USER;
     const isRoot = process.getuid?.() === 0;
 
     const args = [
       '--user',
-      '-u', 'plasma-kwin_wayland.service',
+      '-u', this.journalUnit,
       '-f',
       '-o', 'cat',
       '-n', '0',
@@ -65,14 +77,17 @@ export class WindowTracker extends EventEmitter {
         logger.error(`Window tracker process exited with code ${code}`);
         this.running = false;
       }
+      this.clearHealthTimer();
     });
 
     this.process.on('error', (error) => {
       logger.error('Window tracker process error:', error);
       this.running = false;
+      this.clearHealthTimer();
     });
 
-    logger.info('✓ Window tracker started');
+    this.scheduleHealthCheck();
+    logger.info(`✓ Window tracker started (journal unit: ${this.journalUnit})`);
   }
 
   async stop(): Promise<void> {
@@ -81,6 +96,7 @@ export class WindowTracker extends EventEmitter {
     }
 
     this.running = false;
+    this.clearHealthTimer();
 
     if (this.process) {
       this.process.kill();
@@ -98,6 +114,7 @@ export class WindowTracker extends EventEmitter {
   private parseLine(line: string): void {
     const event = this.parseLineInternal(line);
     if (event) {
+      this.linesReceived++;
       this.emit('window-activated', event);
     }
   }
@@ -148,6 +165,28 @@ export class WindowTracker extends EventEmitter {
     } catch {
       logger.debug('Failed to parse window event:', line);
       return null;
+    }
+  }
+
+  private scheduleHealthCheck(): void {
+    this.clearHealthTimer();
+    this.healthTimer = setTimeout(() => {
+      if (this.running && this.linesReceived === 0) {
+        logger.warn(
+          `⚠️  No window events received in ${HEALTH_CHECK_MS / 1000}s from ${this.journalUnit}`
+        );
+        logger.warn('   Check: qdbus6 org.kde.KWin /Scripting isScriptLoaded window-tracker');
+        logger.warn(
+          `   Or: journalctl --user -f -u ${this.journalUnit} | grep 'Window Activity Tracker'`
+        );
+      }
+    }, HEALTH_CHECK_MS);
+  }
+
+  private clearHealthTimer(): void {
+    if (this.healthTimer) {
+      clearTimeout(this.healthTimer);
+      this.healthTimer = null;
     }
   }
 }

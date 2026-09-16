@@ -27,6 +27,12 @@ const ConfigSchema = z.object({
       includeProcesses: z.array(z.string()).default([]),
       excludeProcesses: z.array(z.string()).default([]),
     }).optional(),
+    processIdentity: z.object({
+      /** Read /proc/{pid}/cmdline — may contain passwords or tokens; off by default. */
+      captureCommandLine: z.boolean().default(false),
+    }).optional(),
+    /** Override KWin journal unit; auto-detected when omitted. */
+    kwinJournalUnit: z.string().optional(),
   }),
   correlation: z.object({
     enabled: z.boolean().default(true),
