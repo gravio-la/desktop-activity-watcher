@@ -51,7 +51,28 @@ describe('parseOpensnoopLine', () => {
     expect(parsed!.filePath).toBe('/home/basti/daten/scores/symphony.pdf');
   });
 
+  test('parses BCC 0.35 -e line with octal FLAGS and n/a MODE', () => {
+    const line =
+      '0.131974000   1000  3104554 KIO::WorkerThre    40   0 02204000 n/a  /home/basti/daten/project/readme.md';
+    const parsed = parseOpensnoopLine(line);
+
+    expect(parsed).not.toBeNull();
+    expect(parsed!.comm).toBe('KIO::WorkerThre');
+    expect(parsed!.flags).toBe('02204000');
+    expect(parsed!.filePath).toBe('/home/basti/daten/project/readme.md');
+  });
+
+  test('parses BCC 0.35 -e line with octal FLAGS and MODE', () => {
+    const line =
+      '0.500000000   1000  12345 cursor             12   0 00000101 0644 /home/basti/new-file.txt';
+    const parsed = parseOpensnoopLine(line);
+
+    expect(parsed!.flags).toBe('00000101');
+    expect(parsed!.filePath).toBe('/home/basti/new-file.txt');
+  });
+
   test('returns null for header lines', () => {
+    expect(parseOpensnoopLine('TIME(s) UID PID COMM FD ERR FLAGS MODE PATH')).toBeNull();
     expect(parseOpensnoopLine('TIME(s) UID PID COMM FD ERR FLAGS PATH')).toBeNull();
     expect(parseOpensnoopLine('TIME(s)       UID   PID    COMM               FD ERR PATH')).toBeNull();
     expect(parseOpensnoopLine('---')).toBeNull();

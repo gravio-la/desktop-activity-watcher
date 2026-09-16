@@ -1,8 +1,10 @@
 /**
- * Parse BCC opensnoop output with -T -U (default) or -T -U -e (FLAGS column).
+ * Parse BCC opensnoop output with -T -U (default) or -T -U -e (FLAGS + MODE columns).
  *
  * Default:  TIME(s) UID PID COMM(16) FD ERR PATH
- * With -e:   TIME(s) UID PID COMM(16) FD ERR FLAGS PATH
+ * With -e:   TIME(s) UID PID COMM(16) FD ERR FLAGS MODE PATH
+ *            FLAGS is octal (e.g. 02204000); MODE is octal or "n/a" (bcc 0.35+).
+ *            Older builds may emit symbolic FLAGS (O_RDONLY|…) without MODE.
  *
  * Note: opensnoop -F is --full-path (kernel-internal headers), not flags.
  * COMM is a fixed 16-character kernel task name (may contain spaces, padded).
@@ -65,10 +67,22 @@ export function parseOpensnoopLine(line: string): ParsedOpensnoopLine | null {
   const fd = parseInt(tailParts[0], 10);
   const err = tailParts[1];
 
-  // With -e, field 3 is O_RDONLY|…; otherwise field 3 starts the path
-  const hasFlags = tailParts.length >= 4 && /^O_[A-Z0-9_|]+$/.test(tailParts[2]);
-  const flags = hasFlags ? tailParts[2] : '';
-  const filePath = hasFlags ? tailParts.slice(3).join(' ') : tailParts.slice(2).join(' ');
+  const isSymbolicFlags = /^O_[A-Z0-9_|]+$/.test(tailParts[2] ?? '');
+  const isNumericFlags = /^0[0-7]+$/.test(tailParts[2] ?? '');
+  const isModeToken = (token: string) => token === 'n/a' || /^0[0-7]+$/.test(token);
+
+  let flags = '';
+  let filePath: string;
+
+  if (isSymbolicFlags && tailParts.length >= 4) {
+    flags = tailParts[2];
+    filePath = tailParts.slice(3).join(' ');
+  } else if (isNumericFlags && tailParts.length >= 5 && isModeToken(tailParts[3])) {
+    flags = tailParts[2];
+    filePath = tailParts.slice(4).join(' ');
+  } else {
+    filePath = tailParts.slice(2).join(' ');
+  }
 
   if (Number.isNaN(fd) || !filePath) {
     return null;

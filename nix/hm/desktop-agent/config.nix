@@ -2,7 +2,6 @@
 
 let
   inherit (agentPkgs)
-    opensnoopCmd
     kwinScript
     daemonPackage
     configJson
@@ -95,7 +94,6 @@ in
       Environment = [
         "CONFIG_PATH=%h/.config/desktop-agent/config.json"
         "DESKTOP_AGENT_CONFIG=%h/.config/desktop-agent/config.json"
-        "OPENSNOOP_CMD=${opensnoopCmd}"
       ];
       EnvironmentFile = envFile;
 
