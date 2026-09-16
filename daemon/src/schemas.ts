@@ -38,6 +38,8 @@ export const FileEventSchema = z.object({
   filePath: z.string(),
   processName: z.string(),
   pid: z.number().int().nonnegative(),
+  threadPid: z.number().int().nonnegative().optional(),
+  threadComm: z.string().optional(),
   uid: z.number().int().nonnegative(),
   fd: z.number().int().nonnegative().optional(),
   flags: z.string().optional(),

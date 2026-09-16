@@ -27,7 +27,12 @@ export interface FileEvent {
   operation: 'open' | 'read' | 'write' | 'close';
   filePath: string;
   processName: string;
+  /** Process group ID (TGID) — matches KWin window PID for correlation */
   pid: number;
+  /** Thread PID from opensnoop (may differ from pid) */
+  threadPid?: number;
+  /** Raw opensnoop COMM (thread name) */
+  threadComm?: string;
   uid: number;
   fd?: number;
   flags?: string;

@@ -215,9 +215,15 @@ You should only see files from `~/daten/` in the results.
 
 ## Environment Variables
 
-You can override the config location:
+The daemon searches for config in this order:
+
+1. `CONFIG_PATH` (set by the Home Manager systemd unit)
+2. `DESKTOP_AGENT_CONFIG`
+3. `~/.config/desktop-agent/config.json`
+4. `./config.json`, `./daemon/config.json`, `/etc/desktop-agent/config.json`
+
 ```bash
-export DESKTOP_AGENT_CONFIG=/path/to/my/config.json
+export CONFIG_PATH=~/.config/desktop-agent/config.json
 sudo -E bun run start
 ```
 

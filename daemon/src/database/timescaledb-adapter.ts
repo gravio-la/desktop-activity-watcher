@@ -1,18 +1,21 @@
 /**
  * TimescaleDB adapter for desktop agent events
- * 
+ *
  * Writes events to PostgreSQL/TimescaleDB as hypertable rows
  */
 
 import { Client } from 'pg';
 import type { DatabaseAdapter } from './adapter';
-import type { Event, WindowEvent, FileEvent, CorrelatedEvent } from '../schemas';
+import type { Event } from '../schemas';
 import type { TimescaleDBConfig } from './config';
 import { logger } from '../logger';
 
+const MAX_CONNECT_ATTEMPTS = 10;
+const CONNECT_RETRY_MS = 3000;
+
 export class TimescaleDBAdapter implements DatabaseAdapter {
   readonly name = 'TimescaleDB';
-  
+
   private client: Client | null = null;
   private config: TimescaleDBConfig;
 
@@ -21,28 +24,49 @@ export class TimescaleDBAdapter implements DatabaseAdapter {
   }
 
   async connect(): Promise<void> {
-    try {
-      this.client = new Client({
-        connectionString: this.config.connectionString,
-      });
-      
-      await this.client.connect();
-      
-      // Create tables if they don't exist
-      await this.initializeTables();
-      
-      logger.info(`✅ ${this.name} connected`);
-    } catch (error) {
-      logger.error(`❌ ${this.name} connection failed:`, error);
-      throw error;
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= MAX_CONNECT_ATTEMPTS; attempt++) {
+      try {
+        this.client = new Client({
+          connectionString: this.config.connectionString,
+        });
+
+        await this.client.connect();
+        await this.initializeTables();
+
+        logger.info(`✅ ${this.name} connected`);
+        return;
+      } catch (error) {
+        lastError = error;
+        if (this.client) {
+          try {
+            await this.client.end();
+          } catch {
+            // ignore cleanup errors
+          }
+          this.client = null;
+        }
+
+        if (attempt < MAX_CONNECT_ATTEMPTS) {
+          logger.warn(
+            `${this.name}: connect attempt ${attempt}/${MAX_CONNECT_ATTEMPTS} failed, retrying in ${CONNECT_RETRY_MS}ms`
+          );
+          await new Promise((resolve) => setTimeout(resolve, CONNECT_RETRY_MS));
+        }
+      }
     }
+
+    logger.error(`❌ ${this.name} connection failed after ${MAX_CONNECT_ATTEMPTS} attempts:`, lastError);
+    throw lastError;
   }
 
   private async initializeTables(): Promise<void> {
     if (!this.client) return;
 
     try {
-      // Create main events table
+      await this.client.query('CREATE EXTENSION IF NOT EXISTS timescaledb');
+
       await this.client.query(`
         CREATE TABLE IF NOT EXISTS desktop_agent_events (
           time TIMESTAMPTZ NOT NULL,
@@ -51,7 +75,6 @@ export class TimescaleDBAdapter implements DatabaseAdapter {
         );
       `);
 
-      // Convert to hypertable (idempotent - does nothing if already a hypertable)
       await this.client.query(`
         SELECT create_hypertable(
           'desktop_agent_events',
@@ -60,14 +83,13 @@ export class TimescaleDBAdapter implements DatabaseAdapter {
         );
       `);
 
-      // Create indexes for common queries
       await this.client.query(`
-        CREATE INDEX IF NOT EXISTS idx_event_type 
+        CREATE INDEX IF NOT EXISTS idx_event_type
         ON desktop_agent_events (event_type, time DESC);
       `);
 
       await this.client.query(`
-        CREATE INDEX IF NOT EXISTS idx_event_data_pid 
+        CREATE INDEX IF NOT EXISTS idx_event_data_pid
         ON desktop_agent_events ((event_data->>'pid'));
       `);
 
@@ -86,15 +108,14 @@ export class TimescaleDBAdapter implements DatabaseAdapter {
 
     try {
       const timestamp = new Date(event.timestamp);
-      
+
       await this.client.query(
-        `INSERT INTO desktop_agent_events (time, event_type, event_data) 
+        `INSERT INTO desktop_agent_events (time, event_type, event_data)
          VALUES ($1, $2, $3)`,
         [timestamp, event.type, JSON.stringify(event)]
       );
     } catch (error) {
       logger.error(`${this.name}: Failed to write event:`, error);
-      // Don't throw - we don't want to crash the daemon
     }
   }
 
@@ -110,4 +131,3 @@ export class TimescaleDBAdapter implements DatabaseAdapter {
     }
   }
 }
-

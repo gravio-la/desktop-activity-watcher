@@ -21,7 +21,7 @@ Add this to your `configuration.nix`:
       users = [ "yourusername" ];  # Replace with your username
       commands = [
         {
-          command = "${pkgs.linuxPackages.bcc}/bin/opensnoop";
+          command = "${pkgs.bcc}/bin/opensnoop";
           options = [ "NOPASSWD" ];
         }
       ];
@@ -192,7 +192,7 @@ Here's a complete `configuration.nix` with all recommended settings:
       users = [ "yourusername" ];  # CHANGE THIS
       commands = [
         {
-          command = "${pkgs.linuxPackages.bcc}/bin/opensnoop";
+          command = "${pkgs.bcc}/bin/opensnoop";
           options = [ "NOPASSWD" ];
         }
       ];

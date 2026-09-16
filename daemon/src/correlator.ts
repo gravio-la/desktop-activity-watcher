@@ -1,6 +1,6 @@
 /**
  * Event Correlator
- * 
+ *
  * Correlates window events with file access events
  * Writes to databases and optionally to JSONL file
  */
@@ -10,10 +10,11 @@ import type { WindowEvent, FileEvent, CorrelatedEvent } from './types';
 import type { DatabaseWriter } from './database/writer';
 import type { Config } from './config-loader';
 import { shouldMonitorFile, shouldMonitorProcess } from './config-loader';
+import { JsonlSink } from './jsonl-sink';
 
 export class EventCorrelator {
   private logFile: string;
-  private fileHandle: any = null;
+  private jsonlSink: JsonlSink | null = null;
   private currentWindow: WindowEvent | null = null;
   private dbWriter: DatabaseWriter | null;
   private keepJsonl: boolean;
@@ -23,12 +24,13 @@ export class EventCorrelator {
     fileEvents: 0,
     correlatedEvents: 0,
     filteredEvents: 0,
+    skippedWindowEvents: 0,
   };
 
   constructor(
-    logFile: string, 
-    dbWriter: DatabaseWriter | null = null, 
-    keepJsonl: boolean = true,
+    logFile: string,
+    dbWriter: DatabaseWriter | null = null,
+    keepJsonl: boolean = false,
     config: Config
   ) {
     this.logFile = logFile;
@@ -38,22 +40,22 @@ export class EventCorrelator {
   }
 
   async init(): Promise<void> {
-    // Open log file for appending if keepJsonl is enabled
     if (this.keepJsonl) {
       try {
-        this.fileHandle = await Bun.file(this.logFile).writer();
-        logger.info(`📝 Writing events to JSONL: ${this.logFile}`);
+        this.jsonlSink = new JsonlSink(this.logFile);
+        await this.jsonlSink.open();
+        logger.info(`📝 Writing events to JSONL (append): ${this.logFile}`);
       } catch (error) {
         logger.warn(`⚠️  Failed to open JSONL file: ${this.logFile}`);
         if (error instanceof Error) {
           logger.warn(`   ${error.message}`);
         }
-        logger.warn(`   JSONL logging disabled, using databases only`);
+        logger.warn('   JSONL logging disabled, using databases only');
         this.keepJsonl = false;
+        this.jsonlSink = null;
       }
     }
-    
-    // Initialize database writer
+
     if (this.dbWriter) {
       await this.dbWriter.connect();
       logger.info('📝 Writing events to databases');
@@ -61,13 +63,11 @@ export class EventCorrelator {
   }
 
   async close(): Promise<void> {
-    // Give pending async writes a moment to complete
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    if (this.fileHandle) {
-      await this.fileHandle.flush();
-      await this.fileHandle.end();
-      this.fileHandle = null;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    if (this.jsonlSink) {
+      await this.jsonlSink.close();
+      this.jsonlSink = null;
     }
 
     if (this.dbWriter) {
@@ -79,13 +79,21 @@ export class EventCorrelator {
     logger.info(`   File events: ${this.stats.fileEvents}`);
     logger.info(`   Correlated events: ${this.stats.correlatedEvents}`);
     logger.info(`   Filtered events: ${this.stats.filteredEvents}`);
+    if (this.stats.skippedWindowEvents > 0) {
+      logger.info(`   Skipped window events (invalid PID): ${this.stats.skippedWindowEvents}`);
+    }
   }
 
   handleWindowEvent(event: WindowEvent): void {
+    if (event.pid < 0) {
+      this.stats.skippedWindowEvents++;
+      logger.debug(`🚫 Skipped window event with invalid PID: ${event.windowTitle}`);
+      return;
+    }
+
     this.currentWindow = event;
     this.stats.windowEvents++;
 
-    // Write to databases and/or log file
     this.writeEvent({
       type: 'window_activated',
       ...event,
@@ -93,14 +101,12 @@ export class EventCorrelator {
   }
 
   handleFileEvent(event: FileEvent): void {
-    // Apply file filters
     if (!shouldMonitorFile(event.filePath, this.config)) {
       this.stats.filteredEvents++;
       logger.debug(`🚫 Filtered file: ${event.filePath}`);
       return;
     }
 
-    // Apply process filters
     if (!shouldMonitorProcess(event.processName, this.config)) {
       this.stats.filteredEvents++;
       logger.debug(`🚫 Filtered process: ${event.processName}`);
@@ -109,8 +115,14 @@ export class EventCorrelator {
 
     this.stats.fileEvents++;
 
-    // Check if we can correlate with current window
-    if (this.currentWindow && event.pid === this.currentWindow.pid) {
+    logger.info(
+      `📂 File access: ${event.filePath} by ${event.processName} (PID: ${event.pid})`
+    );
+
+    const correlationEnabled = this.config.correlation?.enabled !== false;
+    const correlateByPid = this.config.correlation?.correlateByPid !== false;
+
+    if (correlationEnabled && correlateByPid && this.currentWindow && event.pid === this.currentWindow.pid) {
       this.stats.correlatedEvents++;
 
       const correlated: CorrelatedEvent = {
@@ -138,27 +150,20 @@ export class EventCorrelator {
       });
     }
 
-    // Write raw file event
     this.writeEvent(event);
   }
 
-  private writeEvent(event: any): void {
-    // Write to database if available
+  private writeEvent(event: unknown): void {
     if (this.dbWriter) {
-      this.dbWriter.writeEvent(event).catch(err => {
+      this.dbWriter.writeEvent(event).catch((err) => {
         logger.error('Failed to write event to database:', err);
       });
     }
 
-    // Write to JSONL file if enabled
-    if (this.keepJsonl) {
-      if (!this.fileHandle) {
-        // Lazy init
-        Bun.write(this.logFile, JSON.stringify(event) + '\n', { createPath: true });
-      } else {
-        this.fileHandle.write(JSON.stringify(event) + '\n');
-      }
+    if (this.keepJsonl && this.jsonlSink) {
+      this.jsonlSink.write(event).catch((err) => {
+        logger.error('Failed to write event to JSONL:', err);
+      });
     }
   }
 }
-

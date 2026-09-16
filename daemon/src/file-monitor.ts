@@ -1,6 +1,6 @@
 /**
  * File Monitor
- * 
+ *
  * Monitors file access in the home directory using opensnoop
  */
 
@@ -8,13 +8,14 @@ import { spawn, type ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import { logger } from './logger';
 import type { FileEvent } from './types';
+import { parseOpensnoopLine } from './opensnoop-parser';
+import { resolveProcessInfo } from './proc-info';
 
 export class FileMonitor extends EventEmitter {
   private process: ChildProcess | null = null;
   private running = false;
   private homeDir: string;
   private eventCount = 0;
-  private lastLog = Date.now();
   private opensnoopCmd: string = '';
 
   constructor(homeDir: string) {
@@ -28,15 +29,13 @@ export class FileMonitor extends EventEmitter {
       return;
     }
 
-    // Check if opensnoop is available
-    // Allow custom command via OPENSNOOP_CMD environment variable
     const customCmd = process.env.OPENSNOOP_CMD;
-    
+
     if (customCmd) {
       this.opensnoopCmd = customCmd;
       logger.info(`Using custom opensnoop command: ${customCmd}`);
     } else {
-      this.opensnoopCmd = await this.findOpensnoop() || '';
+      this.opensnoopCmd = (await this.findOpensnoop()) || '';
       if (!this.opensnoopCmd) {
         throw new Error(
           'opensnoop not found. Please ensure it is installed and in PATH, or set OPENSNOOP_CMD environment variable.'
@@ -46,25 +45,19 @@ export class FileMonitor extends EventEmitter {
 
     this.running = true;
 
-    // Start opensnoop with useful flags
-    // -T = timestamps
-    // -U = include UID
-    // Note: -F (full paths) causes crashes in BCC, so we skip it
-    // Output format: TIME(s) UID PID COMM FD ERR PATH
-    const args = ['-T', '-U'];
+    // -T timestamps, -U UID, -F open flags (O_RDONLY etc.)
+    // Output: TIME(s) UID PID COMM(16) FD ERR FLAGS PATH
+    const args = ['-T', '-U', '-F'];
 
     logger.info(`Using opensnoop: ${this.opensnoopCmd}`);
-    
-    // Parse the command if it contains spaces (e.g., "sudo /path/to/opensnoop")
+
     const cmdParts = this.opensnoopCmd.split(' ');
     const cmd = cmdParts[0];
     const cmdArgs = cmdParts.slice(1);
-    
-    // Combine command args with monitoring args
     const fullArgs = [...cmdArgs, ...args];
-    
+
     logger.info(`Spawning: ${cmd} ${fullArgs.join(' ')}`);
-    
+
     this.process = spawn(cmd, fullArgs, {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -73,7 +66,6 @@ export class FileMonitor extends EventEmitter {
       throw new Error('Failed to capture process streams');
     }
 
-    // Parse output line by line
     let buffer = '';
     this.process.stdout.on('data', (data: Buffer) => {
       buffer += data.toString();
@@ -88,16 +80,13 @@ export class FileMonitor extends EventEmitter {
     this.process.stderr.on('data', (data: Buffer) => {
       const msg = data.toString().trim();
       if (msg) {
-        // Log stderr output, but filter out noise
         if (msg.includes('Tracing') || msg.includes('PID')) {
           logger.debug(`opensnoop: ${msg}`);
         } else if (msg.includes('Possibly lost')) {
-          // Lost samples warnings are normal under load, just debug log them
           logger.debug(`opensnoop: ${msg}`);
         } else if (msg.includes('error') || msg.includes('Error') || msg.includes('TypeError')) {
           logger.error(`opensnoop error: ${msg}`);
         } else if (msg.includes('Exception') || msg.includes('Traceback')) {
-          // Suppress Python tracebacks to avoid log spam
           logger.debug(`opensnoop exception: ${msg}`);
         } else {
           logger.debug(`opensnoop: ${msg}`);
@@ -108,14 +97,10 @@ export class FileMonitor extends EventEmitter {
     this.process.on('close', (code) => {
       if (this.running) {
         if (code === 0) {
-          logger.info(`File monitor stopped cleanly`);
+          logger.info('File monitor stopped cleanly');
         } else if (code === 2) {
-          logger.error(`File monitor exited with code 2 (likely argument or permission issue)`);
-          logger.error(`This can happen if:`);
-          logger.error(`  - eBPF is not enabled in your kernel`);
-          logger.error(`  - Missing kernel debug symbols`);
-          logger.error(`  - BCC tools not properly installed`);
-          logger.error(`Try running manually to see error: sudo ${this.opensnoopCmd} -T -U`);
+          logger.error('File monitor exited with code 2 (likely argument or permission issue)');
+          logger.error('Try running manually: sudo ' + this.opensnoopCmd + ' -T -U -F');
         } else {
           logger.error(`File monitor process exited with code ${code}`);
         }
@@ -128,7 +113,7 @@ export class FileMonitor extends EventEmitter {
       this.running = false;
     });
 
-    logger.info('✓ File monitor started (filtering for home directory)');
+    logger.info('✓ File monitor started (home directory pre-filter only; path filters in correlator)');
   }
 
   async stop(): Promise<void> {
@@ -148,13 +133,12 @@ export class FileMonitor extends EventEmitter {
 
   private async findOpensnoop(): Promise<string | null> {
     const candidates = [
-      'opensnoop',                      // Should work in Nix shell
-      'opensnoop-bpfcc',                // Debian/Ubuntu name
-      '/usr/share/bcc/tools/opensnoop', // BCC tools location
-      '/usr/sbin/opensnoop',            // System location
+      'opensnoop',
+      'opensnoop-bpfcc',
+      '/usr/share/bcc/tools/opensnoop',
+      '/usr/sbin/opensnoop',
     ];
 
-    // Try which command first
     for (const cmd of candidates) {
       try {
         const result = await Bun.spawn(['which', cmd], {
@@ -163,8 +147,7 @@ export class FileMonitor extends EventEmitter {
         });
         const output = await new Response(result.stdout).text();
         if (output.trim()) {
-          const path = output.trim();
-          logger.debug(`Found opensnoop via 'which': ${path}`);
+          logger.debug(`Found opensnoop via 'which': ${output.trim()}`);
           return cmd;
         }
       } catch {
@@ -172,21 +155,16 @@ export class FileMonitor extends EventEmitter {
       }
     }
 
-    // If that fails, try to find in Nix store
     try {
       const result = await Bun.spawn(
         ['find', '/nix/store', '-name', 'opensnoop', '-type', 'f', '-executable'],
-        {
-          stdout: 'pipe',
-          stderr: 'ignore',
-        }
+        { stdout: 'pipe', stderr: 'ignore' }
       );
       const output = await new Response(result.stdout).text();
-      const paths = output.trim().split('\n').filter(p => p && p.includes('/bin/'));
+      const paths = output.trim().split('\n').filter((p) => p && p.includes('/bin/'));
       if (paths.length > 0) {
-        const path = paths[0];
-        logger.debug(`Found opensnoop in Nix store: ${path}`);
-        return path;
+        logger.debug(`Found opensnoop in Nix store: ${paths[0]}`);
+        return paths[0];
       }
     } catch (error) {
       logger.debug('Failed to search Nix store:', error);
@@ -195,81 +173,63 @@ export class FileMonitor extends EventEmitter {
     return null;
   }
 
+  /** Exposed for unit tests. */
+  parseLineForTest(line: string): FileEvent | null {
+    return this.parseLineInternal(line);
+  }
+
   private parseLine(line: string): void {
-    // Skip header lines
-    if (line.startsWith('TIME') || line.startsWith('UID') || line.startsWith('---') || !line.trim()) {
-      return;
-    }
-
-    try {
-      // Parse opensnoop output with -T -U -F flags
-      // Format: TIME(s) UID PID COMM FD ERR PATH
-      const parts = line.trim().split(/\s+/);
-      if (parts.length < 7) return;
-
-      const timeStr = parts[0];
-      const uid = parseInt(parts[1]);
-      const pid = parseInt(parts[2]);
-      const processName = parts[3];
-      const fd = parseInt(parts[4]);
-      const err = parts[5];
-      const filePath = parts.slice(6).join(' ');
-      
-      // Use current timestamp (timeStr is relative seconds since start)
-      const timestamp = new Date().toISOString();
-
-      // Filter: only home directory
-      if (!filePath.startsWith(this.homeDir)) {
-        return;
-      }
-
-      // Skip errors
-      if (err !== '0') {
-        return;
-      }
-
-      // Skip some noisy files
-      if (
-        filePath.includes('/.cache/') ||
-        filePath.includes('/.local/share/baloo/') ||
-        filePath.includes('/socket')
-      ) {
-        return;
-      }
-
-      const event: FileEvent = {
-        type: 'file_accessed',
-        timestamp,
-        operation: 'open',
-        filePath,
-        processName,
-        pid,
-        uid,
-        fd,
-        flags: undefined,
-      };
-
-      this.eventCount++;
-
-      // Log rate limiting (every 2 seconds max)
-      const now = Date.now();
-      if (now - this.lastLog > 2000) {
-        logger.info(
-          `📂 File access: ${filePath} by ${processName} (PID: ${pid})`
-        );
-        this.lastLog = now;
-      } else {
-        logger.debug(
-          `📂 File access: ${filePath} by ${processName} (PID: ${pid})`
-        );
-      }
-
-      // Emit the event
+    const event = this.parseLineInternal(line);
+    if (event) {
       this.emit('file-accessed', event);
-
-    } catch (error) {
-      logger.debug('Failed to parse file event:', line);
     }
   }
-}
 
+  private parseLineInternal(line: string): FileEvent | null {
+    const parsed = parseOpensnoopLine(line);
+    if (!parsed) {
+      return null;
+    }
+
+    const { uid, threadPid, comm, fd, err, flags, filePath } = parsed;
+
+    if (!filePath.startsWith(this.homeDir)) {
+      return null;
+    }
+
+    if (err !== '0') {
+      return null;
+    }
+
+    if (
+      filePath.includes('/.cache/') ||
+      filePath.includes('/.local/share/baloo/') ||
+      filePath.includes('/socket')
+    ) {
+      return null;
+    }
+
+    const proc = resolveProcessInfo(threadPid, comm);
+
+    const event: FileEvent = {
+      type: 'file_accessed',
+      timestamp: new Date().toISOString(),
+      operation: 'open',
+      filePath,
+      processName: proc.processName,
+      pid: proc.tgid,
+      threadPid,
+      threadComm: proc.threadComm,
+      uid,
+      fd,
+      flags,
+    };
+
+    this.eventCount++;
+    logger.debug(
+      `📂 File access: ${filePath} by ${proc.processName} (TGID: ${proc.tgid}, thread: ${threadPid})`
+    );
+
+    return event;
+  }
+}

@@ -152,8 +152,8 @@
       jsonl = {
         enable = lib.mkOption {
           type = lib.types.bool;
-          default = true;
-          description = "Enable JSONL file output";
+          default = false;
+          description = "Enable JSONL file output (debug only; Timescale is the production sink)";
         };
 
         path = lib.mkOption {

@@ -8,6 +8,8 @@ let
     configJson
     envFile
     ;
+
+  kwriteconfig = "${pkgs.kdePackages.kconfig}/bin/kwriteconfig6";
 in
 {
   home.file = lib.mkIf cfg.kwinScript.enable {
@@ -20,6 +22,19 @@ in
   xdg.configFile."desktop-agent/config.json" = lib.mkIf cfg.daemon.enable {
     source = configJson;
   };
+
+  # Enable the KWin script in kwinrc when autoEnable is set
+  home.activation.enableDesktopAgentKwinScript = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    ${lib.optionalString (cfg.kwinScript.enable && cfg.kwinScript.autoEnable) ''
+      echo "desktop-agent: enabling KWin window-tracker script in kwinrc"
+      ${kwriteconfig} --file kwinrc --group Plugins --key window-trackerEnabled true
+      if command -v qdbus6 >/dev/null 2>&1; then
+        qdbus6 org.kde.KWin /KWin reconfigure 2>/dev/null || true
+      elif command -v qdbus >/dev/null 2>&1; then
+        qdbus org.kde.KWin /KWin reconfigure 2>/dev/null || true
+      fi
+    ''}
+  '';
 
   systemd.user.services.desktop-agent = lib.mkIf cfg.daemon.enable {
     Unit = {
@@ -37,6 +52,7 @@ in
 
       Environment = [
         "CONFIG_PATH=%h/.config/desktop-agent/config.json"
+        "DESKTOP_AGENT_CONFIG=%h/.config/desktop-agent/config.json"
         "OPENSNOOP_CMD=${opensnoopCmd}"
       ];
       EnvironmentFile = envFile;

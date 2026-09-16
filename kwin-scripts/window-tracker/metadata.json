@@ -12,13 +12,10 @@
         "Id": "window-tracker",
         "License": "GPL",
         "Name": "Window Activity Tracker",
-        "Version": "0.1.0",
+        "Version": "0.2.0",
         "Website": ""
     },
-    "KPackage": {
-        "Type": "KWin/Script"
-    },
-    "X-Plasma-API": "javascript",
+    "KPackageStructure": "KWin/Script",
+    "X-Plasma-API": "javascripts/modules/6",
     "X-Plasma-MainScript": "code/main.js"
 }
-

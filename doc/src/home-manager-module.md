@@ -19,7 +19,7 @@ Add the following to your `configuration.nix` to allow the Desktop Agent daemon 
       users = [ "yourusername" ];  # Replace with your username!
       commands = [
         {
-          command = "${pkgs.linuxPackages.bcc}/bin/opensnoop";
+          command = "${pkgs.bcc}/bin/opensnoop";
           options = [ "NOPASSWD" ];
         }
       ];
@@ -110,11 +110,21 @@ Add to your `home.nix`:
     
     # KWin script will be installed and enabled automatically
     
-    # At least one database backend should be enabled
-    databases.jsonl.enable = true;  # Enabled by default
+    kwinScript.autoEnable = true;  # Plasma 6: writes kwinrc on switch
+
+    databases.timescaledb = {
+      enable = true;
+      host = "/run/postgresql";
+      port = 5433;
+      database = "desktop_agent";
+      user = "yourusername";
+      password = "";  # peer auth
+    };
   };
 }
 ```
+
+Requires NixOS `services.desktop-agent-timescale.enable = true` (or another Postgres+Timescale instance).
 
 ### Full Configuration with InfluxDB
 

@@ -1,6 +1,6 @@
 /**
  * Window Tracker
- * 
+ *
  * Monitors KWin journal output for window activation events
  */
 
@@ -23,10 +23,9 @@ export class WindowTracker extends EventEmitter {
 
     this.running = true;
 
-    // If running as root via sudo, we need to run journalctl as the real user
     const realUser = process.env.SUDO_USER;
     const isRoot = process.getuid?.() === 0;
-    
+
     const args = [
       '--user',
       '-u', 'plasma-kwin_wayland.service',
@@ -35,7 +34,6 @@ export class WindowTracker extends EventEmitter {
       '-n', '0',
     ];
 
-    // If we're root but there's a SUDO_USER, run journalctl as that user
     if (isRoot && realUser) {
       logger.info(`Running journalctl as user: ${realUser}`);
       this.process = spawn('sudo', ['-u', realUser, 'journalctl', ...args]);
@@ -47,7 +45,6 @@ export class WindowTracker extends EventEmitter {
       throw new Error('Failed to capture process streams');
     }
 
-    // Parse output line by line
     let buffer = '';
     this.process.stdout.on('data', (data: Buffer) => {
       buffer += data.toString();
@@ -93,40 +90,64 @@ export class WindowTracker extends EventEmitter {
     logger.info('✓ Window tracker stopped');
   }
 
+  /** Exposed for unit tests. */
+  parseLineForTest(line: string): WindowEvent | null {
+    return this.parseLineInternal(line);
+  }
+
   private parseLine(line: string): void {
-    // Look for our KWin script output
-    if (!line.includes('Window Activity Tracker:')) {
-      return;
+    const event = this.parseLineInternal(line);
+    if (event) {
+      this.emit('window-activated', event);
+    }
+  }
+
+  private parseLineInternal(line: string): WindowEvent | null {
+    // Match "Window Activity Tracker:" with optional "js: " journal prefix
+    if (!/Window Activity Tracker:/.test(line)) {
+      return null;
     }
 
     try {
-      // Extract JSON from the line
       const jsonStart = line.indexOf('{');
-      if (jsonStart === -1) return;
+      if (jsonStart === -1) return null;
 
       const jsonStr = line.substring(jsonStart);
-      const event = JSON.parse(jsonStr) as WindowEvent;
+      const raw = JSON.parse(jsonStr) as Record<string, unknown>;
 
-      // Add type field
-      event.type = 'window_activated';
+      const pid = typeof raw.pid === 'number' ? raw.pid : -1;
 
-      // Check if this is a new window/app
+      const event: WindowEvent = {
+        type: 'window_activated',
+        timestamp: String(raw.timestamp ?? new Date().toISOString()),
+        windowTitle: String(raw.windowTitle ?? 'Unknown'),
+        resourceClass: String(raw.resourceClass ?? 'Unknown'),
+        resourceName: String(raw.resourceName ?? 'Unknown'),
+        pid,
+        windowId: Number(raw.windowId ?? 0),
+        desktop: Number(raw.desktop ?? -1),
+        screen: Number(raw.screen ?? 0),
+        activities: Array.isArray(raw.activities) ? raw.activities.map(String) : [],
+        geometry: (raw.geometry as WindowEvent['geometry']) ?? {
+          x: 0,
+          y: 0,
+          width: 0,
+          height: 0,
+        },
+      };
+
       if (event.pid !== this.lastPid || event.resourceClass !== this.lastApp) {
-        // Log the switch
         logger.info(
           `🪟  Switched to: ${event.windowTitle} [${event.resourceClass}] (PID: ${event.pid})`
         );
-
         this.lastPid = event.pid;
         this.lastApp = event.resourceClass;
       }
 
-      // Emit the event
-      this.emit('window-activated', event);
-
-    } catch (error) {
+      return event;
+    } catch {
       logger.debug('Failed to parse window event:', line);
+      return null;
     }
   }
 }
-

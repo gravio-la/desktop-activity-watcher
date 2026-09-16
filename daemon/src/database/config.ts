@@ -1,6 +1,6 @@
 /**
  * Database configuration
- * 
+ *
  * Reads from environment variables with sensible defaults
  * Allows enabling/disabling individual databases
  */
@@ -30,6 +30,25 @@ export interface DatabaseConfig {
   keepJsonl: boolean;
 }
 
+export function buildTimescaleConnectionString(): string {
+  if (process.env.TIMESCALEDB_URL) {
+    return process.env.TIMESCALEDB_URL;
+  }
+
+  const host = process.env.TIMESCALEDB_HOST || 'localhost';
+  const port = process.env.TIMESCALEDB_PORT || '5432';
+  const database = process.env.TIMESCALEDB_DATABASE || 'desktop_agent';
+  const user = process.env.TIMESCALEDB_USER || 'desktopagent';
+  const password = process.env.TIMESCALEDB_PASSWORD || 'desktopagent123';
+
+  // Unix socket path (no password) vs TCP host
+  if (host.startsWith('/')) {
+    return `postgresql:///${database}?host=${encodeURIComponent(host)}&port=${port}`;
+  }
+
+  return `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:${port}/${database}`;
+}
+
 /**
  * Load database configuration from environment variables
  */
@@ -44,8 +63,7 @@ export function loadDatabaseConfig(): DatabaseConfig {
     },
     timescaledb: {
       enabled: process.env.TIMESCALEDB_ENABLED === 'true',
-      connectionString: process.env.TIMESCALEDB_URL || 
-        'postgresql://desktopagent:desktopagent123@localhost:5432/desktop_agent',
+      connectionString: buildTimescaleConnectionString(),
     },
     redis: {
       enabled: process.env.REDIS_ENABLED === 'true',
@@ -54,4 +72,3 @@ export function loadDatabaseConfig(): DatabaseConfig {
     keepJsonl: process.env.KEEP_JSONL === 'true',
   };
 }
-

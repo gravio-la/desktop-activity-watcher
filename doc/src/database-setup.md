@@ -4,12 +4,31 @@ This guide explains how to set up and use the database integration for the Deskt
 
 ## Architecture
 
-The daemon now writes events to three time series databases:
-- **InfluxDB** - High-performance time series database
-- **TimescaleDB** - PostgreSQL with time series extensions
-- **Redis** - In-memory database with time series support
+**Recommended sink: TimescaleDB** — PostgreSQL with the Timescale extension. Events land in a JSONB hypertable (`desktop_agent_events`), which supports SQL joins, continuous aggregates, and matches the semantic-desktop composite-store pattern.
 
-All three databases can be enabled/disabled independently via environment variables.
+Optional backends (off by default):
+- **InfluxDB** — legacy / analytics experiments
+- **Redis** — in-memory timeline experiments
+- **JSONL** — append-only debug file (not the production sink)
+
+Enable backends in `~/.config/desktop-agent/config.json` or via environment variables (`TIMESCALEDB_ENABLED`, `TIMESCALEDB_URL`, etc.). All adapters default to **disabled** unless explicitly enabled.
+
+### NixOS (recommended on windnix-T15g)
+
+System module `services.desktop-agent-timescale` runs PostgreSQL + Timescale on **port 5433** with peer auth for your user. Home Manager sets:
+
+```nix
+databases.timescaledb = {
+  enable = true;
+  host = "/run/postgresql";
+  port = 5433;
+  database = "desktop_agent";
+  user = "basti";
+  password = "";  # peer auth via Unix socket
+};
+```
+
+Connection string emitted to config: `postgresql:///desktop_agent?host=/run/postgresql&port=5433`
 
 ## Quick Start
 
@@ -26,20 +45,18 @@ This will install:
 - `pg` - PostgreSQL/TimescaleDB client
 - `redis` - Redis client
 
-### 2. Start Databases
+### 2. Start the database
+
+**NixOS:** enable `services.desktop-agent-timescale.enable = true` and rebuild.
+
+**Docker (development only):**
 
 ```bash
-# From project root
-docker-compose up -d
-
-# Verify they're running
-docker-compose ps
+docker compose up -d timescaledb
+docker compose ps
 ```
 
-You should see all three containers healthy:
-- `desktop-agent-influxdb` (port 8086)
-- `desktop-agent-timescaledb` (port 5432)
-- `desktop-agent-redis` (port 6379)
+Container `desktop-agent-timescaledb` listens on port 5432 unless you remap it.
 
 ### 3. Run the Daemon
 
@@ -59,19 +76,21 @@ The `-E` flag preserves environment variables.
 
 ## Configuration
 
-All databases are enabled by default. Configure using environment variables:
+All database adapters are **disabled by default**. Enable the ones you need:
 
 ### Enable/Disable Databases
 
 ```bash
-# Disable specific databases
-export INFLUXDB_ENABLED=false
-export TIMESCALEDB_ENABLED=false
-export REDIS_ENABLED=false
+export TIMESCALEDB_ENABLED=true
+export TIMESCALEDB_URL='postgresql:///desktop_agent?host=/run/postgresql&port=5433'
 
-# Keep JSONL logging (default: true)
-export KEEP_JSONL=true
+# Optional extras
+export INFLUXDB_ENABLED=false
+export REDIS_ENABLED=false
+export KEEP_JSONL=false
 ```
+
+The systemd user service also reads `~/.config/desktop-agent/config.json` via `CONFIG_PATH` / `DESKTOP_AGENT_CONFIG`.
 
 ### Custom Connection Strings
 
@@ -117,10 +136,11 @@ curl -XPOST 'http://localhost:8086/api/v2/query?org=desktop-agent' \
 ### TimescaleDB
 
 ```bash
-# Connect to database
-psql -h localhost -U desktopagent -d desktop_agent
+# NixOS peer auth (port 5433)
+psql -p 5433 -d desktop_agent
 
-# Password: desktopagent123
+# Docker dev default
+# psql -h localhost -U desktopagent -d desktop_agent
 
 # Query recent events
 SELECT 
